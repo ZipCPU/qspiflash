@@ -118,8 +118,8 @@
 		if (m_@$(MEM.NAME)_last_sck) {
 			(*m_@$(MEM.NAME))(m_core->o_spi_cs_n, 0,
 						m_core->o_spi_mosi);
-		} m_core->i_spi_miso = ((*m_@$(MEM.NAME))(m_core->o_spi_cs_n, 1,
-						m_core->o_spi_mosi))?1:0;
+		} m_core->i_spi_miso =(((*m_@$(MEM.NAME))(m_core->o_spi_cs_n, 1,
+						m_core->o_spi_mosi))&2)?1:0;
 		m_@$(MEM.NAME)_last_sck = m_core->o_spi_sck;
 #endif
 @SIM.LOAD +=

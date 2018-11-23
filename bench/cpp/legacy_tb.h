@@ -12,7 +12,7 @@
 //
 ////////////////////////////////////////////////////////////////////////////////
 //
-// Copyright (C) 2015-2018, Gisselquist Technology, LLC
+// Copyright (C) 2015-2017, Gisselquist Technology, LLC
 //
 // This program is free software (firmware): you can redistribute it and/or
 // modify it under the terms of  the GNU General Public License as published
@@ -54,8 +54,8 @@ public:
 		m_bomb = false;
 		m_ack_expected = false;
 		TESTB<VA>::m_core->i_wb_cyc = 0;
-		TESTB<VA>::m_core->i_wb_stb = 0;
-		TESTB<VA>::m_core->i_cfg_stb = 0;
+		TESTB<VA>::m_core->i_wb_data_stb = 0;
+		TESTB<VA>::m_core->i_wb_ctrl_stb = 0;
 	}
 
 #define	TICK	tick
@@ -66,17 +66,17 @@ public:
 			||(!TESTB<VA>::m_core->o_wb_ack));
 	}
 
-	unsigned cfg_read(void) {
+	unsigned wb_ctrl_read(unsigned a) {
 		int		errcount = 0;
 		unsigned	result;
 
 		// printf("WB-READM(%08x)\n", a);
 
 		TESTB<VA>::m_core->i_wb_cyc = 1;
-		TESTB<VA>::m_core->i_wb_stb = 0;
-		TESTB<VA>::m_core->i_cfg_stb = 1;
+		TESTB<VA>::m_core->i_wb_data_stb = 0;
+		TESTB<VA>::m_core->i_wb_ctrl_stb = 1;
 		TESTB<VA>::m_core->i_wb_we  = 0;
-		TESTB<VA>::m_core->i_wb_addr= 0; // (a>>2);
+		TESTB<VA>::m_core->i_wb_addr= (a>>2);
 
 		if (TESTB<VA>::m_core->o_wb_stall) {
 			while((errcount++ < BOMBCOUNT)&&(TESTB<VA>::m_core->o_wb_stall)) {
@@ -84,8 +84,8 @@ public:
 			}
 		} TICK();
 
-		TESTB<VA>::m_core->i_wb_stb = 0;
-		TESTB<VA>::m_core->i_cfg_stb = 0;
+		TESTB<VA>::m_core->i_wb_data_stb = 0;
+		TESTB<VA>::m_core->i_wb_ctrl_stb = 0;
 
 		while((errcount++ <  BOMBCOUNT)&&(!TESTB<VA>::m_core->o_wb_ack)) {
 			TICK();
@@ -97,8 +97,8 @@ public:
 
 		// Release the bus
 		TESTB<VA>::m_core->i_wb_cyc = 0;
-		TESTB<VA>::m_core->i_wb_stb = 0;
-		TESTB<VA>::m_core->i_cfg_stb = 0;
+		TESTB<VA>::m_core->i_wb_data_stb = 0;
+		TESTB<VA>::m_core->i_wb_ctrl_stb = 0;
 
 		if(errcount >= BOMBCOUNT) {
 			printf("WB/SR-BOMB: NO RESPONSE AFTER %d CLOCKS\n", errcount);
@@ -113,6 +113,7 @@ public:
 
 		while(TESTB<VA>::m_core->o_wb_stall)
 			TICK();
+		// assert(!TESTB<VA>::m_core->o_wb_stall);
 
 		return result;
 	}
@@ -124,8 +125,8 @@ public:
 		// printf("WB-READM(%08x)\n", a);
 
 		TESTB<VA>::m_core->i_wb_cyc = 1;
-		TESTB<VA>::m_core->i_wb_stb = 1;
-		TESTB<VA>::m_core->i_cfg_stb = 0;
+		TESTB<VA>::m_core->i_wb_data_stb = 1;
+		TESTB<VA>::m_core->i_wb_ctrl_stb = 0;
 		TESTB<VA>::m_core->i_wb_we  = 0;
 		TESTB<VA>::m_core->i_wb_addr= (a>>2);
 
@@ -135,8 +136,8 @@ public:
 			}
 		} TICK();
 
-		TESTB<VA>::m_core->i_wb_stb = 0;
-		TESTB<VA>::m_core->i_cfg_stb = 0;
+		TESTB<VA>::m_core->i_wb_data_stb = 0;
+		TESTB<VA>::m_core->i_wb_ctrl_stb = 0;
 
 		while((errcount++ <  BOMBCOUNT)&&(!TESTB<VA>::m_core->o_wb_ack)) {
 			TICK();
@@ -148,8 +149,8 @@ public:
 
 		// Release the bus
 		TESTB<VA>::m_core->i_wb_cyc = 0;
-		TESTB<VA>::m_core->i_wb_stb = 0;
-		TESTB<VA>::m_core->i_cfg_stb = 0;
+		TESTB<VA>::m_core->i_wb_data_stb = 0;
+		TESTB<VA>::m_core->i_wb_ctrl_stb = 0;
 
 		if(errcount >= BOMBCOUNT) {
 			printf("WB/SR-BOMB: NO RESPONSE AFTER %d CLOCKS\n", errcount);
@@ -178,8 +179,8 @@ public:
 
 		printf("WB-READM(%08x, %d)\n", a, len);
 		TESTB<VA>::m_core->i_wb_cyc  = 0;
-		TESTB<VA>::m_core->i_wb_stb = 1;
-		TESTB<VA>::m_core->i_cfg_stb = 0;
+		TESTB<VA>::m_core->i_wb_data_stb = 1;
+		TESTB<VA>::m_core->i_wb_ctrl_stb = 0;
 
 		while((errcount++ < BOMBCOUNT)&&(TESTB<VA>::m_core->o_wb_stall))
 			TICK();
@@ -193,8 +194,8 @@ public:
 		errcount = 0;
 		
 		TESTB<VA>::m_core->i_wb_cyc  = 1;
-		TESTB<VA>::m_core->i_wb_stb = 1;
-		TESTB<VA>::m_core->i_cfg_stb = 0;
+		TESTB<VA>::m_core->i_wb_data_stb = 1;
+		TESTB<VA>::m_core->i_wb_ctrl_stb = 0;
 		TESTB<VA>::m_core->i_wb_we   = 0;
 		TESTB<VA>::m_core->i_wb_addr = (a>>2);
 
@@ -210,8 +211,8 @@ public:
 				buf[rdidx++] = TESTB<VA>::m_core->o_wb_data;
 		} while((cnt < len)&&(errcount++ < THISBOMBCOUNT));
 
-		TESTB<VA>::m_core->i_wb_stb = 0;
-		TESTB<VA>::m_core->i_cfg_stb = 0;
+		TESTB<VA>::m_core->i_wb_data_stb = 0;
+		TESTB<VA>::m_core->i_wb_ctrl_stb = 0;
 
 		while((rdidx < len)&&(errcount++ < THISBOMBCOUNT)) {
 			TICK();
@@ -234,15 +235,15 @@ public:
 		assert(!TESTB<VA>::m_core->o_wb_ack);
 	}
 
-	void	cfg_write(unsigned v) {
+	void	wb_ctrl_write(unsigned a, unsigned v) {
 		int errcount = 0;
 
-		// printf("CFG-WRITEM() <= %08x\n", v);
+		printf("WB-WRITEM(%08x) <= %08x\n", a, v);
 		TESTB<VA>::m_core->i_wb_cyc = 1;
-		TESTB<VA>::m_core->i_wb_stb = 0;
-		TESTB<VA>::m_core->i_cfg_stb = 1;
+		TESTB<VA>::m_core->i_wb_data_stb = 0;
+		TESTB<VA>::m_core->i_wb_ctrl_stb = 1;
 		TESTB<VA>::m_core->i_wb_we  = 1;
-		TESTB<VA>::m_core->i_wb_addr= 0;
+		TESTB<VA>::m_core->i_wb_addr= (a>>2);
 		TESTB<VA>::m_core->i_wb_data= v;
 		// TESTB<VA>::m_core->i_wb_sel = 0x0f;
 
@@ -253,7 +254,7 @@ public:
 			}
 		TICK();
 
-		TESTB<VA>::m_core->i_cfg_stb = 0;
+		TESTB<VA>::m_core->i_wb_ctrl_stb = 0;
 
 		while((errcount++ <  BOMBCOUNT)&&(!TESTB<VA>::m_core->o_wb_ack))
 			TICK();
@@ -261,8 +262,8 @@ public:
 
 		// Release the bus?
 		TESTB<VA>::m_core->i_wb_cyc = 0;
-		TESTB<VA>::m_core->i_cfg_stb = 0;
-		TESTB<VA>::m_core->i_wb_stb = 0;
+		TESTB<VA>::m_core->i_wb_ctrl_stb = 0;
+		TESTB<VA>::m_core->i_wb_data_stb = 0;
 		m_ack_expected = false;
 
 		if(errcount >= BOMBCOUNT) {
@@ -281,8 +282,8 @@ public:
 
 		printf("WB-WRITEM(%08x) <= %08x\n", a, v);
 		TESTB<VA>::m_core->i_wb_cyc = 1;
-		TESTB<VA>::m_core->i_wb_stb = 1;
-		TESTB<VA>::m_core->i_cfg_stb = 0;
+		TESTB<VA>::m_core->i_wb_data_stb = 1;
+		TESTB<VA>::m_core->i_wb_ctrl_stb = 0;
 		TESTB<VA>::m_core->i_wb_we  = 1;
 		TESTB<VA>::m_core->i_wb_addr= (a>>2);
 		TESTB<VA>::m_core->i_wb_data= v;
@@ -295,8 +296,8 @@ public:
 			}
 		TICK();
 
-		TESTB<VA>::m_core->i_wb_stb = 0;
-		TESTB<VA>::m_core->i_cfg_stb = 0;
+		TESTB<VA>::m_core->i_wb_data_stb = 0;
+		TESTB<VA>::m_core->i_wb_ctrl_stb = 0;
 
 		while((errcount++ <  BOMBCOUNT)&&(!TESTB<VA>::m_core->o_wb_ack))
 			TICK();
@@ -304,8 +305,8 @@ public:
 
 		// Release the bus?
 		TESTB<VA>::m_core->i_wb_cyc = 0;
-		TESTB<VA>::m_core->i_wb_stb = 0;
-		TESTB<VA>::m_core->i_cfg_stb = 0;
+		TESTB<VA>::m_core->i_wb_data_stb = 0;
+		TESTB<VA>::m_core->i_wb_ctrl_stb = 0;
 		m_ack_expected = false;
 
 		if(errcount >= BOMBCOUNT) {
@@ -324,8 +325,8 @@ public:
 
 		printf("WB-WRITEM(%08x, %d, ...)\n", a, ln);
 		TESTB<VA>::m_core->i_wb_cyc = 1;
-		TESTB<VA>::m_core->i_wb_stb = 1;
-		TESTB<VA>::m_core->i_cfg_stb = 0;
+		TESTB<VA>::m_core->i_wb_data_stb = 1;
+		TESTB<VA>::m_core->i_wb_ctrl_stb = 0;
 		TESTB<VA>::m_core->i_wb_we  = 1;
 		TESTB<VA>::m_core->i_wb_addr= (a>>2);
 		// TESTB<VA>::m_core->i_wb_sel = 0x0f;
@@ -348,8 +349,8 @@ public:
 			TESTB<VA>::m_core->i_wb_addr += inc;
 		}
 
-		TESTB<VA>::m_core->i_wb_stb = 1;
-		TESTB<VA>::m_core->i_cfg_stb = 0;
+		TESTB<VA>::m_core->i_wb_data_stb = 1;
+		TESTB<VA>::m_core->i_wb_ctrl_stb = 0;
 
 		errcount = 0;
 		while((nacks < ln)&&(errcount++ < BOMBCOUNT)) {
@@ -362,8 +363,8 @@ public:
 
 		// Release the bus
 		TESTB<VA>::m_core->i_wb_cyc = 0;
-		TESTB<VA>::m_core->i_wb_stb = 0;
-		TESTB<VA>::m_core->i_cfg_stb = 0;
+		TESTB<VA>::m_core->i_wb_data_stb = 0;
+		TESTB<VA>::m_core->i_wb_ctrl_stb = 0;
 		m_ack_expected = false;
 
 		if(errcount >= BOMBCOUNT) {

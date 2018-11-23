@@ -1,10 +1,10 @@
 ////////////////////////////////////////////////////////////////////////////////
 //
-// Filename: 	qspiflash_tb.cpp
+// Filename: 	wbqspiflash_tb.cpp
 //
 // Project:	Wishbone Controlled Quad SPI Flash Controller
 //
-// Purpose:	To determine whether or not the qspiflash module works.  Run
+// Purpose:	To determine whether or not the wbqspiflash module works.  Run
 //		this with no arguments, and check whether or not the last line
 //	contains "SUCCESS" or not.  If it does contain "SUCCESS", then the
 //	module passes all tests found within here.
@@ -14,7 +14,7 @@
 //
 ////////////////////////////////////////////////////////////////////////////////
 //
-// Copyright (C) 2015-2016, Gisselquist Technology, LLC
+// Copyright (C) 2015-2016,2018, Gisselquist Technology, LLC
 //
 // This program is free software (firmware): you can redistribute it and/or
 // modify it under the terms of  the GNU General Public License as published
@@ -40,20 +40,20 @@
 //
 #include "verilated.h"
 #include "Vwbqspiflash.h"
-#include "qspiflashsim.h"
-#include "wbflash_tb.h"
+#include "flashsim.h"
+#include "legacy_tb.h"
 
 #define	QSPIFLASH	0x0400000
 #define	PARENT	WBFLASH_TB<Vwbqspiflash>
 
 class	QSPIFLASH_TB : public PARENT {
-	QSPIFLASHSIM	*m_flash;
+	FLASHSIM	*m_flash;
 	bool		m_bomb;
 public:
 
 	QSPIFLASH_TB(void) {
 		m_core = new Vwbqspiflash;
-		m_flash= new QSPIFLASHSIM;
+		m_flash= new FLASHSIM;
 		m_flash->debug(true);
 	}
 

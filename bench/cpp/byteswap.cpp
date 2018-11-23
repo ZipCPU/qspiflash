@@ -1,14 +1,10 @@
 ////////////////////////////////////////////////////////////////////////////////
 //
-// Filename: 	flashconfig.v
+// Filename: 	byteswap.cpp
 //
 // Project:	A Set of Wishbone Controlled SPI Flash Controllers
 //
-// Purpose:	A configuration file, separated from the controller file, so
-//		that multiple files can use the same wishbone Quad Spi Flash
-//	controller, while each having a separate configuration.  Currently,
-//	the configuration only includes whether the flash is read only or not.
-//	Other configuration options may be added later.
+// Purpose:	
 //
 // Creator:	Dan Gisselquist, Ph.D.
 //		Gisselquist Technology, LLC
@@ -42,10 +38,52 @@
 ////////////////////////////////////////////////////////////////////////////////
 //
 //
-`ifndef	FLASH_CONFIG_V
-`define	FLASH_CONFIG_V
-//
-// `define	READ_ONLY
-//
-`endif
-//
+#include <stdint.h>
+#include "byteswap.h"
+
+uint32_t
+byteswap(uint32_t v) {
+	uint32_t	r = 0;
+
+	r = (v & 0x0ff);
+	r <<= 8; v >>= 8;
+	r |= (v & 0x0ff);
+	r <<= 8; v >>= 8;
+	r |= (v & 0x0ff);
+	r <<= 8; v >>= 8;
+	r |= (v & 0x0ff);
+
+	return r;
+}
+
+uint32_t
+buildword(const unsigned char *p) {
+	uint32_t	r = 0;
+
+	r  = (*p++); r <<= 8;
+	r |= (*p++); r <<= 8;
+	r |= (*p++); r <<= 8;
+	r |= (*p  );
+
+	return r;
+}
+
+uint32_t
+buildswap(const unsigned char *p) {
+	uint32_t	r = 0;
+
+	r  = p[3]; r <<= 8;
+	r |= p[2]; r <<= 8;
+	r |= p[1]; r <<= 8;
+	r |= p[0];
+
+	return r;
+}
+
+void
+byteswapbuf(int ln, uint32_t *buf) {
+	for(int i=0; i<ln; i++)
+		buf[i] = byteswap(buf[i]);
+}
+
+

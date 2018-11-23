@@ -43,30 +43,53 @@
 ##
 all:	test
 YYMMDD=`date +%Y%m%d`
-CXX   := g++
-FBDIR := .
-VDIRFB:= $(FBDIR)/obj_dir
+VDIRFB := ./obj_dir
+SPI    := spixpress
+DSPI   := dualflexpress
+QSPI   := qflexpress
+LEGACY := wbqspiflash
+SUBMAKE := make --no-print-directory -C
+VERILATOR := verilator
+VFLAGS    := -Wall --MMD --trace -cc
 
 .PHONY: test
-test: $(VDIRFB)/Veqspiflash__ALL.a $(VDIRFB)/Vwbqspiflash__ALL.a
-# test: $(VDIRFB)/Vfastmaster__ALL.a
+test: $(VDIRFB)/V$(SPI)__ALL.a $(VDIRFB)/V$(LEGACY)__ALL.a
+test: $(VDIRFB)/V$(DSPI)__ALL.a $(VDIRFB)/V$(QSPI)__ALL.a
 
-$(VDIRFB)/Veqspiflash.h $(VDIRFB)/Veqspiflash.cpp $(VDIRFB)/Veqspiflash.mk: eqspiflash.v lleqspi.v
-$(VDIRFB)/Vwbqspiflash.h $(VDIRFB)/Vwbqspiflash.cpp $(VDIRFB)/Vwbqspiflash.mk: wbqspiflash.v llqspi.v
-$(VDIRFB)/V%.cpp $(VDIRFB)/V%.h $(VDIRFB)/V%.mk: $(FBDIR)/%.v
-	verilator -trace -cc $*.v 
+$(VDIRFB)/V$(LEGACY).mk:  $(VDIRFB)/V$(LEGACY).h
+$(VDIRFB)/V$(LEGACY).cpp: $(VDIRFB)/V$(LEGACY).h
+$(VDIRFB)/V$(LEGACY).h: $(LEGACY).v llqspi.v
+	$(VERILATOR) $(VFLAGS) $(LEGACY).v 
+
+$(VDIRFB)/V$(SPI).mk:  $(VDIRFB)/V$(SPI).h
+$(VDIRFB)/V$(SPI).cpp: $(VDIRFB)/V$(SPI).h
+$(VDIRFB)/V$(SPI).h: $(SPI).v
+	$(VERILATOR) $(VFLAGS) $(SPI).v 
+
+$(VDIRFB)/V$(DSPI).mk:  $(VDIRFB)/V$(DSPI).h
+$(VDIRFB)/V$(DSPI).cpp: $(VDIRFB)/V$(DSPI).h
+$(VDIRFB)/V$(DSPI).h: $(DSPI).v
+	$(VERILATOR) $(VFLAGS) $(DSPI).v 
+
+$(VDIRFB)/V$(QSPI).mk:  $(VDIRFB)/V$(QSPI).h
+$(VDIRFB)/V$(QSPI).cpp: $(VDIRFB)/V$(QSPI).h
+$(VDIRFB)/V$(QSPI).h: $(QSPI).v
+	$(VERILATOR) $(VFLAGS) $(QSPI).v 
 
 $(VDIRFB)/V%__ALL.a: $(VDIRFB)/V%.mk
-	cd $(VDIRFB); make -f V$*.mk
+	$(SUBMAKE) $(VDIRFB) -f V$*.mk
 
-.PHONY:
-archive:
-	tar --transform s,^,$(YYMMDD)-rtl/, -chjf $(YYMMDD)-rtl.tjz Makefile *.v cpu/*.v
+tags: $(LEGACY).v llqspi.v $(SPI).v $(DSPI).v $(QSPI.v)
+	ctags $^
 
 .PHONY: clean
 clean:
-	rm -rf $(VDIRFB)/*.mk
-	rm -rf $(VDIRFB)/*.cpp
-	rm -rf $(VDIRFB)/*.h
 	rm -rf $(VDIRFB)/
 
+
+DEPS = $(wildcard $(VDIRFB)/*.d)
+ifneq ($(MAKECMDGOALS),clean)
+ifneq ($(DEPS),)
+include $(DEPS)
+endif
+endif

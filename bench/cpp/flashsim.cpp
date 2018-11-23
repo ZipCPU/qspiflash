@@ -51,7 +51,9 @@
 
 #include "flashsim.h"
 
-static	const unsigned	DEVID = 0x0115,
+extern const unsigned DEVID;
+const unsigned	DEVID = 0x01152340;
+static	const unsigned
 	DEVESD = 0x014,
 	MICROSECONDS = 100,
 	MILLISECONDS = MICROSECONDS * 1000,
@@ -130,7 +132,7 @@ bool	FLASHSIM::deep_sleep(void) const {
 	return deep_sleep();
 }
 
-#define	QOREG(A)	m_oreg = ((m_oreg & (~0x0ff))|(A&0x0ff))
+#define	QOREG(A)	m_oreg = ((m_oreg & (~0x0ff))|((A)&0x0ff))
 
 int	FLASHSIM::operator()(const int csn, const int sck, const int dat) {
 	// Keep track of a timer to determine when page program and erase
@@ -140,7 +142,8 @@ int	FLASHSIM::operator()(const int csn, const int sck, const int dat) {
 		if (0 == (--m_write_count)) {// When done with erase/page pgm,
 			m_sreg &= 0x0fc; // Clear the write in progress bit
 			if (m_debug) printf("Write complete, clearing WIP (inside SIM)\n");
-		}
+		} else if ((m_debug)&&((m_write_count & 0x03ffff)==0))
+			printf("%6x cycles remaining \'til write/erase completion\n", m_write_count);
 	}
 
 	if (csn) {
@@ -150,9 +153,9 @@ int	FLASHSIM::operator()(const int csn, const int sck, const int dat) {
 
 		if ((QSPIF_PP == m_state)||(QSPIF_QPP == m_state)) {
 			// Start a page program
-			if (m_debug) printf("QSPI: Page Program write cycle begins\n");
+			if (m_debug) printf("FLASHSIM: Page Program write cycle begins\n");
 			if (m_debug) printf("CK = %d & 7 = %d\n", m_count, m_count & 0x07);
-			if (m_debug) printf("QSPI: pmem = %08lx\n", (unsigned long)m_pmem);
+			if (m_debug) printf("FLASHSIM: pmem = %08lx\n", (unsigned long)m_pmem);
 			m_write_count = tPP;
 			m_state = QSPIF_IDLE;
 			m_sreg &= (~QSPIF_WEL_FLAG);
@@ -168,7 +171,7 @@ int	FLASHSIM::operator()(const int csn, const int sck, const int dat) {
 			}
 			m_mode = FM_SPI;
 		} else if (m_state == QSPIF_SECTOR_ERASE) {
-			if (m_debug) printf("Actually Erasing sector, from %08x\n", m_addr);
+			if (m_debug) printf("FLASHSIM: Actually Erasing sector, from %08x\n", m_addr);
 			m_write_count = tSE;
 			m_state = QSPIF_IDLE;
 			m_sreg &= (~QSPIF_WEL_FLAG);
@@ -176,15 +179,15 @@ int	FLASHSIM::operator()(const int csn, const int sck, const int dat) {
 			m_addr &= (-1<<16);
 			for(int i=0; i<(1<<16); i++)
 				m_mem[m_addr + i] = 0x0ff;
-			if (m_debug) printf("Now waiting %d ticks delay\n", m_write_count);
+			if (m_debug) printf("FLASHSIM: Now waiting %d ticks delay\n", m_write_count);
 		} else if (QSPIF_WRSR == m_state) {
-			if (m_debug) printf("Actually writing status register\n");
+			if (m_debug) printf("FLASHSIM: Actually writing status register\n");
 			m_write_count = tW;
 			m_state  = QSPIF_IDLE;
 			m_sreg  &= (~QSPIF_WEL_FLAG);
 			m_sreg  |= (QSPIF_WIP_FLAG);
 		} else if (QSPIF_CLSR == m_state) {
-			if (m_debug) printf("Actually clearing the status register bits\n");
+			if (m_debug) printf("FLASHSIM: Actually clearing the status register bits\n");
 			m_state = QSPIF_IDLE;
 			m_sreg &= 0x09f;
 		} else if (m_state == QSPIF_BULK_ERASE) {
@@ -258,8 +261,8 @@ int	FLASHSIM::operator()(const int csn, const int sck, const int dat) {
 
 		assert(quad_mode());
 		if (m_count == 24) {
-			if (m_debug) printf("QSPI: Entering from Quad-Read Idle to Quad-Read\n");
-			if (m_debug) printf("QSPI: QI/O Idle Addr = %02x\n", m_ireg&0x0ffffff);
+			if (m_debug) printf("FLASHSIM: Entering from Quad-Read Idle to Quad-Read\n");
+			if (m_debug) printf("FLASHSIM: QI/O Idle Addr = %02x\n", m_ireg&0x0ffffff);
 			m_addr = (m_ireg) & m_memmask;
 			assert((m_addr & (~(m_memmask)))==0);
 			m_state = QSPIF_QUAD_READ;
@@ -288,14 +291,14 @@ int	FLASHSIM::operator()(const int csn, const int sck, const int dat) {
 		} else switch(m_ireg & 0x0ff) {
 		case 0x01: // Write status register
 			if (2 !=(m_sreg & 0x203)) {
-				if (m_debug) printf("QSPI: WEL not set, cannot write status reg\n");
+				if (m_debug) printf("FLASHSIM: WEL not set, cannot write status reg\n");
 				m_state = QSPIF_INVALID;
 			} else
 				m_state = QSPIF_WRSR;
 			break;
 		case 0x02: // Page program
 			if (2 != (m_sreg & 0x203)) {
-				if (m_debug) printf("QSPI: Cannot program at this time, SREG = %x\n", m_sreg);
+				if (m_debug) printf("FLASHSIM: Cannot program at this time, SREG = %x\n", m_sreg);
 				m_state = QSPIF_INVALID;
 			} else {
 				m_state = QSPIF_PP;
@@ -305,7 +308,7 @@ int	FLASHSIM::operator()(const int csn, const int sck, const int dat) {
 		case 0x03: // Read data bytes
 			// Our clock won't support this command, so go
 			// to an invalid state
-			if (m_debug) printf("QSPI: SLOW-READ (single-bit)\n");
+			if (m_debug) printf("FLASHSIM: SLOW-READ (single-bit)\n");
 			m_state = QSPIF_SLOW_READ;
 			break;
 		case 0x04: // Write disable
@@ -314,63 +317,63 @@ int	FLASHSIM::operator()(const int csn, const int sck, const int dat) {
 			break;
 		case 0x05: // Read status register
 			m_state = QSPIF_RDSR;
-			if (m_debug) printf("QSPI: READING STATUS REGISTER: %02x\n", m_sreg);
+			if (m_debug) printf("FLASHSIM: READING STATUS REGISTER: %02x\n", m_sreg);
 			QOREG(m_sreg);
 			break;
 		case 0x06: // Write enable
 			m_state = QSPIF_IDLE;
 			m_sreg |= QSPIF_WEL_FLAG;
-			if (m_debug) printf("QSPI: WRITE-ENABLE COMMAND ACCEPTED\n");
+			if (m_debug) printf("FLASHSIM: WRITE-ENABLE COMMAND ACCEPTED\n");
 			break;
 		case 0x0b: // Here's the read that we support
-			if (m_debug) printf("QSPI: FAST-READ (single-bit)\n");
+			if (m_debug) printf("FLASHSIM: FAST-READ (single-bit)\n");
 			m_state = QSPIF_FAST_READ;
 			break;
 		case 0x30:
-			if (m_debug) printf("QSPI: CLEAR STATUS REGISTER COMMAND\n");
+			if (m_debug) printf("FLASHSIM: CLEAR STATUS REGISTER COMMAND\n");
 			m_state = QSPIF_CLSR;
 			break;
 		case 0x32: // QUAD Page program, 4 bits at a time
 			if (2 != (m_sreg & 0x203)) {
-				if (m_debug) printf("QSPI: Cannot program at this time, SREG = %x\n", m_sreg);
+				if (m_debug) printf("FLASHSIM: Cannot program at this time, SREG = %x\n", m_sreg);
 				m_state = QSPIF_INVALID;
 			} else {
 				m_state = QSPIF_QPP;
-				if (m_debug) printf("QSPI: QUAD-PAGE-PROGRAM COMMAND ACCEPTED\n");
-				if (m_debug) printf("QSPI: pmem = %08lx\n", (unsigned long)m_pmem);
+				if (m_debug) printf("FLASHSIM: QUAD-PAGE-PROGRAM COMMAND ACCEPTED\n");
+				if (m_debug) printf("FLASHSIM: pmem = %08lx\n", (unsigned long)m_pmem);
 			}
 			break;
 		case 0x35: // Read configuration register
 			m_state = QSPIF_RDCR;
-			if (m_debug) printf("QSPI: READING CONFIGURATION REGISTER: %02x\n", m_creg);
+			if (m_debug) printf("FLASHSIM: READING CONFIGURATION REGISTER: %02x\n", m_creg);
 			QOREG(m_creg);
 			break;
 		case 0x50: // Clear flag status register
 			m_state = QSPIF_IDLE;
-			if (m_debug) printf("QSPI: CLEARING FLAG-STATUS REGISTER\n");
+			if (m_debug) printf("FLASHSIM: CLEARING FLAG-STATUS REGISTER\n");
 			// This is a NOOP command
 			QOREG(0);
 			break;
 		case 0x70: // Read flag status register register
 			m_state = QSPIF_IDLE;
-			if (m_debug) printf("QSPI: READING FLAG-STATUS REGISTER\n");
+			if (m_debug) printf("FLASHSIM: READING FLAG-STATUS REGISTER\n");
 			QOREG(0);
 			break;
 		case 0x9f: // Read ID
 			m_state = QSPIF_RDID;
-			if (m_debug) printf("QSPI: READING ID, %02x\n", (DEVID>>24)&0x0ff);
-			QOREG(0xfe);
+			if (m_debug) printf("FLASHSIM: READING ID, %02x\n", (DEVID>>24)&0x0ff);
+			QOREG((DEVID>>24)&0x0ff);
 			break;
 		case 0xab: // Release from DEEP POWER DOWN
 			if (m_sreg & QSPIF_DEEP_POWER_DOWN_FLAG) {
-				if (m_debug) printf("QSPI: Release from deep power down\n");
+				if (m_debug) printf("FLASHSIM: Release from deep power down\n");
 				m_sreg &= (~QSPIF_DEEP_POWER_DOWN_FLAG);
 				m_write_count = tRES;
 			} m_state = QSPIF_RELEASE;
 			break;
 		case 0xb9: // DEEP POWER DOWN
 			if (0 != (m_sreg & 0x01)) {
-				if (m_debug) printf("QSPI: Cannot enter DEEP POWER DOWN, in middle of write/erase\n");
+				if (m_debug) printf("FLASHSIM: Cannot enter DEEP POWER DOWN, in middle of write/erase\n");
 				m_state = QSPIF_INVALID;
 			} else {
 				m_sreg  |= QSPIF_DEEP_POWER_DOWN_FLAG;
@@ -385,18 +388,18 @@ int	FLASHSIM::operator()(const int csn, const int sck, const int dat) {
 			
 		case 0xc7: // Bulk Erase
 			if (2 != (m_sreg & 0x203)) {
-				if (m_debug) printf("QSPI: WEL not set, cannot erase device\n");
+				if (m_debug) printf("FLASHSIM: WEL not set, cannot erase device\n");
 				m_state = QSPIF_INVALID;
 			} else
 				m_state = QSPIF_BULK_ERASE;
 			break;
 		case 0xd8: // Sector Erase
 			if (2 != (m_sreg & 0x203)) {
-				if (m_debug) printf("QSPI: WEL not set, cannot erase sector\n");
+				if (m_debug) printf("FLASHSIM: WEL not set, cannot erase sector\n");
 				m_state = QSPIF_INVALID;
 			} else {
 				m_state = QSPIF_SECTOR_ERASE;
-				if (m_debug) printf("QSPI: SECTOR_ERASE COMMAND\n");
+				if (m_debug) printf("FLASHSIM: SECTOR_ERASE COMMAND\n");
 			}
 			break;
 		case 0x0eb: // Here's the (other) read that we support
@@ -410,7 +413,7 @@ int	FLASHSIM::operator()(const int csn, const int sck, const int dat) {
 			m_mode = FM_SPI;
 			break;
 		default:
-			printf("QSPI: UNRECOGNIZED SPI FLASH CMD: %02x\n", m_ireg&0x0ff);
+			printf("FLASHSIM: UNRECOGNIZED SPI FLASH CMD: %02x\n", m_ireg&0x0ff);
 			m_state = QSPIF_INVALID;
 			assert(0 && "Unrecognized command\n");
 			break;
@@ -432,7 +435,7 @@ int	FLASHSIM::operator()(const int csn, const int sck, const int dat) {
 				if (m_debug) printf("Request to set creg to 0x%02x\n",
 					m_ireg&0x0ff);
 			} else {
-				fprintf(stderr, "QSPIFLASH-ERR: TOO MANY CLOCKS FOR WRR!!!\n");
+				fprintf(stderr, "FLASH-ERR: TOO MANY CLOCKS FOR WRR!!!\n");
 				exit(EXIT_FAILURE);
 				m_state = QSPIF_IDLE;
 			}
@@ -441,19 +444,17 @@ int	FLASHSIM::operator()(const int csn, const int sck, const int dat) {
 			assert(0 && "Too many clocks for CLSR command!!\n");
 			break;
 		case QSPIF_RDID:
+			/*
 			if (m_count == 32) {
 				m_addr = m_ireg & m_memmask;
 				if (m_debug) printf("READID, ADDR = %08x\n", m_addr);
-				QOREG((DEVID>>8));
-				if (m_debug) printf("QSPI: READING ID, %02x\n", (DEVID>>8)&0x0ff);
+				QOREG((DEVID>>16));
+				if (m_debug) printf("FLASHSIM: READING ID, %02x\n", (DEVID>>8)&0x0ff);
 			} else if (m_count > 32) {
-				if (((m_count-32)>>3)&1)
-					QOREG((DEVID));
-				else
-					QOREG((DEVID>>8));
-				if (m_debug) printf("QSPI: READING ID, %02x -- DONE\n", 0x00);
-			}
-			// m_oreg = (DEVID >> (2-(m_count>>3)-1)) & 0x0ff;
+				QOREG((DEVID>>(16+8*(m_count-32)/8)));
+				if (m_debug) printf("FLASHSIM: READING ID, %02x -- DONE\n", 0x00);
+			} */
+			QOREG((DEVID >> (32-m_count)));
 			break;
 		case QSPIF_RDSR:
 			// printf("Read SREG = %02x, wait = %08x\n", m_sreg,
@@ -470,11 +471,11 @@ int	FLASHSIM::operator()(const int csn, const int sck, const int dat) {
 				if (m_debug) printf("READ, ADDR = %08x\n", m_addr);
 				assert((m_addr & (~(m_memmask)))==0);
 				if (m_debug) printf("MEM[%06x] = %02x\n",
-					m_addr, m_mem[m_addr]);
+					m_addr, m_mem[m_addr]&0x0ff);
 				QOREG(m_mem[m_addr++]);
 			} else if ((m_count >= 40)&&(0 == (m_sreg&0x01))) {
 				if (m_debug) printf("MEM[%06x] = %02x\n",
-					m_addr, m_mem[m_addr]);
+					m_addr, m_mem[m_addr]&0x0ff);
 				QOREG(m_mem[m_addr++]);
 			} else m_oreg = 0;
 			break;
@@ -506,7 +507,7 @@ int	FLASHSIM::operator()(const int csn, const int sck, const int dat) {
 				QOREG(m_mem[m_addr++]);
 			} else if ((m_count > 32+8)&&(0 == (m_sreg&0x01))) {
 				QOREG(m_mem[m_addr++]);
-				if (m_debug) printf("QSPIF[%08x]/DR = %02x\n",
+				if (m_debug) printf("FLASHSIMF[%08x]/DR = %02x\n",
 					m_addr-1, m_oreg);
 			} else m_oreg = 0;
 			break;
@@ -548,7 +549,7 @@ int	FLASHSIM::operator()(const int csn, const int sck, const int dat) {
 		case QSPIF_PP:
 			if (m_count == 32) {
 				m_addr = m_ireg & m_memmask;
-				if (m_debug) printf("QSPI: PAGE-PROGRAM ADDR = %06x\n", m_addr);
+				if (m_debug) printf("FLASHSIM: PAGE-PROGRAM ADDR = %06x\n", m_addr);
 				assert((m_addr & (~(m_memmask)))==0);
 				// m_page = m_addr >> 8;
 				for(int i=0; i<256; i++)
@@ -562,7 +563,7 @@ int	FLASHSIM::operator()(const int csn, const int sck, const int dat) {
 			if (m_count == 32) {
 				m_addr = m_ireg & m_memmask;
 				m_mode = FM_QSPI;
-				if (m_debug) printf("QSPI/QR: PAGE-PROGRAM ADDR = %06x\n", m_addr);
+				if (m_debug) printf("FLASHSIM/QR: PAGE-PROGRAM ADDR = %06x\n", m_addr);
 				assert((m_addr & (~(m_memmask)))==0);
 				// m_page = m_addr >> 8;
 				for(int i=0; i<256; i++)

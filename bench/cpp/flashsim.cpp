@@ -248,6 +248,10 @@ int	FLASHSIM::operator()(const int csn, const int sck, const int dat) {
 		m_ireg   = (m_ireg << 4) | (dat & 0x0f);
 		m_count += 4;
 		m_oreg <<= 4;
+	} else if (m_mode == FM_DSPI) {
+		m_ireg   = (m_ireg << 2) | (dat & 0x03);
+		m_count += 2;
+		m_oreg <<= 2;
 	} else {
 		m_ireg = (m_ireg << 1) | (dat & 1);
 		m_count++;
@@ -470,12 +474,12 @@ int	FLASHSIM::operator()(const int csn, const int sck, const int dat) {
 				m_addr = m_ireg & m_memmask;
 				if (m_debug) printf("READ, ADDR = %08x\n", m_addr);
 				assert((m_addr & (~(m_memmask)))==0);
-				if (m_debug) printf("MEM[%06x] = %02x\n",
-					m_addr, m_mem[m_addr]&0x0ff);
+				// if (m_debug) printf("MEM[%06x] = %02x\n",
+				//	m_addr, m_mem[m_addr]&0x0ff);
 				QOREG(m_mem[m_addr++]);
 			} else if ((m_count >= 40)&&(0 == (m_sreg&0x01))) {
-				if (m_debug) printf("MEM[%06x] = %02x\n",
-					m_addr, m_mem[m_addr]&0x0ff);
+				// if (m_debug) printf("MEM[%06x] = %02x\n",
+				//	m_addr, m_mem[m_addr]&0x0ff);
 				QOREG(m_mem[m_addr++]);
 			} else m_oreg = 0;
 			break;

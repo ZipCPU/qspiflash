@@ -154,7 +154,6 @@
 			} else {
 				idspi &= 0x002;
 				idspi |= m_core->o_dspi_dat&1;
-				idspi |= 0x0c;
 			}
 
 			m_core->i_dspi_dat = idspi;

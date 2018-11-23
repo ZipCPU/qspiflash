@@ -2,7 +2,7 @@
 //
 // Filename: 	wbqspiflash_tb.cpp
 //
-// Project:	Wishbone Controlled Quad SPI Flash Controller
+// Project:	A Set of Wishbone Controlled SPI Flash Controllers
 //
 // Purpose:	To determine whether or not the wbqspiflash module works.  Run
 //		this with no arguments, and check whether or not the last line
@@ -16,23 +16,26 @@
 //
 // Copyright (C) 2015-2016,2018, Gisselquist Technology, LLC
 //
-// This program is free software (firmware): you can redistribute it and/or
-// modify it under the terms of  the GNU General Public License as published
-// by the Free Software Foundation, either version 3 of the License, or (at
-// your option) any later version.
+// This file is part of the set of Wishbone controlled SPI flash controllers
+// project
 //
-// This program is distributed in the hope that it will be useful, but WITHOUT
-// ANY WARRANTY; without even the implied warranty of MERCHANTIBILITY or
-// FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License
-// for more details.
+// The Wishbone SPI flash controller project is free software (firmware):
+// you can redistribute it and/or modify it under the terms of the GNU Lesser
+// General Public License as published by the Free Software Foundation, either
+// version 3 of the License, or (at your option) any later version.
 //
-// You should have received a copy of the GNU General Public License along
-// with this program.  (It's in the $(ROOT)/doc directory.  Run make with no
-// target there if the PDF file isn't present.)  If not, see
+// The Wishbone SPI flash controller project is distributed in the hope
+// that it will be useful, but WITHOUT ANY WARRANTY; without even the implied
+// warranty of MERCHANTIBILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+// GNU Lesser General Public License for more details.
+//
+// You should have received a copy of the GNU Lesser General Public License
+// along with this program.  (It's in the $(ROOT)/doc directory.  Run make
+// with no target there if the PDF file isn't present.)  If not, see
 // <http://www.gnu.org/licenses/> for a copy.
 //
-// License:	GPL, v3, as defined and found on www.gnu.org,
-//		http://www.gnu.org/licenses/gpl.html
+// License:	LGPL, v3, as defined and found on www.gnu.org,
+//		http://www.gnu.org/licenses/lgpl.html
 //
 //
 ////////////////////////////////////////////////////////////////////////////////
@@ -147,7 +150,7 @@ int main(int  argc, char **argv) {
 
 	for(int i=0; (i<1000)&&(!tb->bombed()); i++) {
 		unsigned	tblv;
-		tblv = (*tb)[(i<<2)];
+		tblv = (*tb)[i];
 		rdv = tb->wb_read(i<<2);
 
 		if(tblv != rdv) {
@@ -162,11 +165,11 @@ int main(int  argc, char **argv) {
 
 	for(int i=0; i<1000; i++)
 		rdbuf[i] = -1;
-	tb->wb_read(1000, 1000, rdbuf);
+	tb->wb_read(1000<<2, 1000, rdbuf);
 	if (tb->bombed())
 		goto	test_failure;
 	for(int i=0; i<1000; i++) {
-		if ((*tb)[(i<<2)+1000] != rdbuf[i]) {
+		if ((*tb)[i+1000] != rdbuf[i]) {
 			printf("BOMB: V-READ[%08x] %08x, EXPECTED %08x\n", 1000+i, rdv, (*tb)[i+1000]);
 			goto	test_failure;
 		}
@@ -195,7 +198,7 @@ int main(int  argc, char **argv) {
 
 	for(int i=0; (i<1000)&&(!tb->bombed()); i++) {
 		unsigned	tblv;
-		tblv = (*tb)[(i<<2)];
+		tblv = (*tb)[i];
 		rdv = tb->wb_read((i<<2));
 
 		if(tblv != rdv) {
@@ -203,11 +206,11 @@ int main(int  argc, char **argv) {
 			goto test_failure;
 			break;
 		} else printf("MATCH: %08x == %08x\n", rdv, tblv);
-	} tb->wb_read(1000, 1000, rdbuf);
+	} tb->wb_read(1000<<2, 1000, rdbuf);
 	if (tb->bombed())
 		goto	test_failure;
 	for(int i=0; i<1000; i++) {
-		if ((*tb)[(i<<2)+1000] != rdbuf[i]) {
+		if ((*tb)[i+1000] != rdbuf[i]) {
 			printf("BOMB: Q-READ/VECTOR %08x, EXPECTED %08x\n", rdv, (*tb)[i+1000]);
 			goto	test_failure;
 		}
@@ -220,7 +223,7 @@ int main(int  argc, char **argv) {
 	printf("Attempting to read in Quad mode, using XIP mode\n");
 	for(int i=0; (i<1000)&&(!tb->bombed()); i++) {
 		unsigned	tblv;
-		tblv = (*tb)[(i<<2)];
+		tblv = (*tb)[i];
 		rdv = tb->wb_read((i<<2));
 
 		if(tblv != rdv) {
@@ -231,11 +234,11 @@ int main(int  argc, char **argv) {
 	}
 
 	// Try a vector read
-	tb->wb_read(1000, 1000, rdbuf);
+	tb->wb_read(1000<<2, 1000, rdbuf);
 	if (tb->bombed())
 		goto	test_failure;
 	for(int i=0; i<1000; i++) {
-		if ((*tb)[(i<<2)+1000] != rdbuf[i]) {
+		if ((*tb)[i+1000] != rdbuf[i]) {
 			printf("BOMB: Q-READ/XIP/VECTOR %08x, EXPECTED %08x\n", rdv, (*tb)[i+1000]);
 			goto	test_failure;
 		}
@@ -283,7 +286,7 @@ int main(int  argc, char **argv) {
 	*/
 
 	printf("Checking that the erase was successful\n");
-	for(int i=SECTORSZB; i<SECTORSZB*2; i+=4) {
+	for(int i=SECTORSZW; i<SECTORSZW*2; i++) {
 		if ((*tb)[i] != 0xffffffff) {
 			printf("BOMB: Erase of [%08x] was unsuccessful, FLASH[%08x] = %08x\n", i, i, (*tb)[i]);
 			goto test_failure;
@@ -291,18 +294,18 @@ int main(int  argc, char **argv) {
 	}
 
 	// Make sure we didn't erase anything else
-	if ((*tb)[SECTORSZB-4] == 0xffffffff) {
+	if ((*tb)[SECTORSZW-1] == 0xffffffff) {
 		printf("BOMB: Post write check #2, the prior address changed\n");
 		goto test_failure;
-	} if ((*tb)[2*SECTORSZB] == 0xffffffff) {
+	} if ((*tb)[2*SECTORSZW] == 0xffffffff) {
 		printf("BOMB: Post write check #2, the next address changed\n");
 		goto test_failure;
 	}
 
-	if (tb->wb_read(SECTORSZB-4) != (*tb)[SECTORSZB-4]) {
+	if (tb->wb_read(SECTORSZB-4) != (*tb)[SECTORSZW-1]) {
 		printf("BOMB: Post write check #2, the prior address changed\n");
 		goto test_failure;
-	} if (tb->wb_read(2*SECTORSZB) != (*tb)[2*SECTORSZB]) {
+	} if (tb->wb_read(2*SECTORSZB) != (*tb)[2*SECTORSZW]) {
 		printf("BOMB: Post write check #2, the next address changed\n");
 		goto test_failure;
 	}
@@ -346,7 +349,7 @@ int main(int  argc, char **argv) {
 
 		printf("Checking page %d\n", p);
 		for(int i=0; i<SZPAGEW; i++) {
-			if (rdbuf[p*SZPAGEW+i] != (*tb)[SECTORSZB+p*SZPAGEB+(i<<2)]) {
+			if (rdbuf[p*SZPAGEW+i] != (*tb)[SECTORSZW+p*SZPAGEW+i]) {
 				printf("BOMB: Write check, Addr[%08x]\n", SECTORSZB+p*SZPAGEB+(i<<2));
 				goto test_failure;
 			}

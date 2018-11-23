@@ -1,14 +1,14 @@
 ////////////////////////////////////////////////////////////////////////////////
 //
-// Filename: 	spixpress_tb.cpp
+// Filename: 	dualflexpress_tb.cpp
 //
 // Project:	A Set of Wishbone Controlled SPI Flash Controllers
 //
-// Purpose:	To determine whether or not the spixpress (SPI only) module
-// 		works.  Run the simulation program this with no arguments,
-// 	and then check whether or not the last line contains "SUCCESS" or not.
-// 	If it does contain "SUCCESS", then the module passes all tests found
-// 	within here.
+// Purpose:	To determine whether or not the dualflexpress (SPI+DSPI only)
+// 		module works.  Run the simulation program this with no
+// 	arguments, and then check whether or not the last line contains
+// 	"SUCCESS" or not.  If it does contain "SUCCESS", then the module passes
+// 	all tests found within here.
 //
 // Creator:	Dan Gisselquist, Ph.D.
 //		Gisselquist Technology, LLC
@@ -43,12 +43,12 @@
 //
 //
 #include "verilated.h"
-#include "Vspixpress.h"
+#include "Vdualflexpress.h"
 #include "byteswap.h"
 #include "flashsim.h"
 #include "wbflash_tb.h"
 
-#define	PARENT	WBFLASH_TB<Vspixpress>
+#define	PARENT	WBFLASH_TB<Vdualflexpress>
 
 #define	LGFLASHSZB	24
 
@@ -66,6 +66,9 @@
 #define	PAGEOF(A)	((A)&(-1<< 8))
 
 static const unsigned	CFG_USERMODE  = 0x1000,
+	     		// CFG_QSPEED    = 0x0400, // Quad I/O
+	     		CFG_DSPEED    = 0x0400, // Dual I/O
+	     		CFG_WEDIR     = 0x0200, // Write
 	     		CFG_USER_CS_n = 0x0100;
 
 static const unsigned	F_RESET = (CFG_USERMODE|0x0ff),
@@ -87,14 +90,12 @@ static const unsigned	F_READID = F_MFRID,
 class	SPIXPRESS_TB : public PARENT {
 	FLASHSIM	*m_flash;
 	bool		m_bomb;
-	int		m_flash_last_sck;
 public:
 
 	SPIXPRESS_TB(void) {
-		m_core = new Vspixpress;
+		m_core = new Vdualflexpress;
 		m_flash= new FLASHSIM;
 		m_flash->debug(true);
-		m_flash_last_sck = 0;
 	}
 
 	unsigned operator[](const int index) { return (*m_flash)[index]; }
@@ -111,12 +112,29 @@ public:
 
 	void	tick(void) {
 		bool	writeout = false;
-		if (m_flash_last_sck) {
-			(*m_flash)(m_core->o_spi_cs_n, 0,
-				m_core->o_spi_mosi);
-		} m_core->i_spi_miso = ((*m_flash)(m_core->o_spi_cs_n, 1,
-				m_core->o_spi_mosi)&2)?1:0;
-		m_flash_last_sck = m_core->o_spi_sck;
+
+		{ static int lastsck = 0; int idspi;
+
+			if (lastsck)
+				(*m_flash)(m_core->o_dspi_cs_n, 0,
+					m_core->o_dspi_dat);
+
+			idspi = (*m_flash)(m_core->o_dspi_cs_n, 1,
+				m_core->o_dspi_dat);
+
+			if (m_core->o_dspi_mod&2) {
+				if (m_core->o_dspi_mod&1) {
+					; // IDSPI is as given
+				} else
+					idspi = m_core->o_dspi_dat;
+			} else {
+				idspi &= 0x02;
+				idspi |= m_core->o_dspi_dat&1;
+			}
+
+			m_core->i_dspi_dat = idspi;
+			lastsck = m_core->o_dspi_sck;
+		}
 
 
 		if (writeout) {
@@ -140,24 +158,50 @@ public:
 
 	bool	bombed(void) const { return m_bomb; }
 
+	void	take_offline(void) {
+		cfg_write(F_END);
+		cfg_write(F_RESET);
+		cfg_write(F_RESET);
+		cfg_write(F_END);
+	}
+
+	void	place_online(void) {
+		static	const	uint32_t DUAL_IO_READ = CFG_USERMODE|0xbb;
+		cfg_write(DUAL_IO_READ);
+		// 3 address bytes
+		cfg_write(CFG_USERMODE | CFG_DSPEED | CFG_WEDIR);
+		cfg_write(CFG_USERMODE | CFG_DSPEED | CFG_WEDIR);
+		cfg_write(CFG_USERMODE | CFG_DSPEED | CFG_WEDIR);
+		// mode byte
+		cfg_write(CFG_USERMODE | CFG_DSPEED | CFG_WEDIR | 0xa0);
+		// Read a dummy byte
+		cfg_write(CFG_USERMODE | CFG_DSPEED);
+		// Close the interface
+		cfg_write(0);
+	}
+
 	unsigned flreadid(void) {
 		unsigned	r;
 
 		cfg_write(F_READID);
 
-		cfg_write(0); r = cfg_read() & 0x0ff;
-		cfg_write(0); r = (r<<8) | (cfg_read() & 0x0ff);
-		cfg_write(0); r = (r<<8) | (cfg_read() & 0x0ff);
-		cfg_write(0); r = (r<<8) | (cfg_read() & 0x0ff);
+		cfg_write(CFG_USERMODE); r = cfg_read() & 0x0ff;
+		cfg_write(CFG_USERMODE); r = (r<<8) | (cfg_read() & 0x0ff);
+		cfg_write(CFG_USERMODE); r = (r<<8) | (cfg_read() & 0x0ff);
+		cfg_write(CFG_USERMODE); r = (r<<8) | (cfg_read() & 0x0ff);
 		cfg_write(F_END);
+
 		return r;
 	}
 
 	int	flstatus(void) {
+		unsigned	v;
+
 		cfg_write(F_RDSR);
-		cfg_write(0);
+		cfg_write(CFG_USERMODE);
+		v = cfg_read()  & 0x0ff;
 		cfg_write(F_END);
-		return cfg_read() & 0x0ff;
+		return v;
 	}
 
 	void	flwait(void) {
@@ -166,7 +210,7 @@ public:
 		printf("Waiting for the erase/program cycle to complete\n");
 		cfg_write(F_RDSR);
 		do {
-			cfg_write(0);
+			cfg_write(CFG_USERMODE);
 			r = cfg_read();
 		} while (r & 1); // Wait while the device is busy
 		cfg_write(F_END);
@@ -174,17 +218,21 @@ public:
 	}
 
 	void	flerase(unsigned sectoraddr) {
+		take_offline();
+
 		cfg_write(F_END);
 		cfg_write(F_WREN);
 		cfg_write(F_END);
 
 		cfg_write(F_SE);
-		cfg_write((sectoraddr >> 16)&0x0ff);
-		cfg_write((sectoraddr >>  8)&0x0ff);
-		cfg_write((sectoraddr      )&0x0ff);
+		cfg_write(CFG_USERMODE|((sectoraddr >> 16)&0x0ff));
+		cfg_write(CFG_USERMODE|((sectoraddr >>  8)&0x0ff));
+		cfg_write(CFG_USERMODE|((sectoraddr      )&0x0ff));
 		cfg_write(F_END);
 
 		flwait();
+
+		place_online();
 	}
 
 	void	flpage_program(int addr, int ln, const char *buf) {
@@ -200,13 +248,13 @@ public:
 		tick();
 
 		cfg_write(F_PP);
-		cfg_write((addr >> 16)&0x0ff);
-		cfg_write((addr >>  8)&0x0ff);
-		cfg_write((addr      )&0x0ff);
+		cfg_write(CFG_USERMODE|((addr >> 16)&0x0ff));
+		cfg_write(CFG_USERMODE|((addr >>  8)&0x0ff));
+		cfg_write(CFG_USERMODE|((addr      )&0x0ff));
 
 		// Write the page data itself
 		for(int i=0; i<ln; i++)
-			cfg_write(buf[i] & 0x0ff);
+			cfg_write(CFG_USERMODE|(buf[i] & 0x0ff));
 		cfg_write(F_END);
 
 		tick();
@@ -218,6 +266,8 @@ public:
 
 	void	flprogram(int addr, int ln, const char *buf) {
 		int	start = addr;
+
+		take_offline();
 		printf("PROGRAM-REQUEST!!\n");
 		while(start < addr + ln) {
 			int	wlen;
@@ -231,6 +281,8 @@ public:
 			start = PAGEOF(start+PGLENB);
 		}
 		flwait();
+
+		place_online();
 	}
 };
 
@@ -241,13 +293,17 @@ int main(int  argc, char **argv) {
 	unsigned	rdv;
 	unsigned	*rdbuf;
 
-	tb->opentrace("spixpress.vcd");
+	tb->opentrace("dualflexpress.vcd");
 
 	tb->load(DEV_RANDOM);
 	rdbuf = new unsigned[RDBUFSZ];
 	tb->setflash(0,0);
 
 	tb->tick();
+	while(tb->m_core->o_wb_stall)
+		tb->tick();
+	printf("Startup completed, stall line has gone low\n");
+
 	rdv = tb->wb_read(0);
 	printf("READ[0] = %04x\n", rdv);
 	if (rdv != 0)
@@ -286,6 +342,8 @@ int main(int  argc, char **argv) {
 	} if (tb->bombed())
 		goto test_failure;
 	printf("VECTOR TEST PASSES!\n");
+
+	tb->take_offline();
 
 	// Read the status register
 	printf("Status Register = 0x%02x\n", rdv = tb->flstatus());

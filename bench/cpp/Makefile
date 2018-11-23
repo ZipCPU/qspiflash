@@ -85,7 +85,7 @@ qflexpress_tb: $(QOBJS) $(VOBJDR)/Vqflexpress__ALL.a
 	$(CXX) $(CFLAGS) $(INCS) $(QOBJS) $(VOBJDR)/Vqflexpress__ALL.a -o $@
 
 .PHONY: pretest
-pretest: qspiflash_tb eqspiflash_tb
+pretest: spixpress_tb dualflexpress_tb qflexpress_tb
 	@echo "The test bench has been created.  Type make test, and look at"
 	@echo "the end of its output to see if it (still) works."
 

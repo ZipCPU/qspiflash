@@ -1,0 +1,75 @@
+[*]
+[*] GTKWave Analyzer v3.3.66 (w)1999-2015 BSI
+[*] Wed Aug 15 12:30:44 2018
+[*]
+[dumpfile] "(null)"
+[savefile] "/home/dan/work/rnd/opencores/icozip/trunk/bench/formal/spixpress.gtkw"
+[timestart] 0
+[size] 1286 600
+[pos] -1 -1
+*-4.696020 30 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1
+[sst_width] 196
+[signals_width] 174
+[sst_expanded] 1
+[sst_vpaned_height] 155
+@28
+spixpress.f_past_valid
+spixpress.i_reset
+spixpress.i_clk
+@200
+-
+@28
+[color] 2
+spixpress.i_wb_cyc
+[color] 2
+spixpress.i_cfg_stb
+[color] 2
+spixpress.i_wb_stb
+[color] 2
+spixpress.i_wb_we
+@22
+[color] 2
+spixpress.i_wb_addr[21:0]
+[color] 2
+spixpress.i_wb_data[31:0]
+@28
+[color] 2
+spixpress.o_wb_ack
+@22
+[color] 2
+spixpress.o_wb_data[31:0]
+@28
+[color] 2
+spixpress.o_wb_stall
+[color] 3
+spixpress.o_spi_cs_n
+[color] 3
+spixpress.o_spi_mosi
+[color] 3
+spixpress.o_spi_sck
+[color] 3
+spixpress.i_spi_miso
+@200
+-
+@28
+spixpress.bus_request
+spixpress.user_request
+@200
+-
+@22
+spixpress.ack_delay[6:0]
+@28
+spixpress.actual_sck
+spixpress.cfg_user_mode
+@23
+spixpress.f_addr[21:0]
+@22
+spixpress.f_data[31:0]
+spixpress.f_last_addr[21:0]
+spixpress.f_nacks[6:0]
+spixpress.f_nreqs[6:0]
+spixpress.f_outstanding[6:0]
+spixpress.f_wr_data[7:0]
+spixpress.wdata_pipe[32:0]
+[pattern_trace] 1
+[pattern_trace] 0

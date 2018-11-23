@@ -1,0 +1,22 @@
+[tasks]
+prf
+cvr
+
+[options]
+prf: mode prove
+prf: depth 36
+cvr: mode cover
+cvr: depth 60
+
+[engines]
+smtbmc boolector
+
+[script]
+read -formal -DQFLEXPRESS fwb_slave.v
+read -formal -DQFLEXPRESS qflexpress.v
+cvr: chparam -set OPT_STARTUP 0 qflexpress
+prep -top qflexpress
+
+[files]
+fwb_slave.v
+../../rtl/qflexpress.v

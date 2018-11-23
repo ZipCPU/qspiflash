@@ -1,0 +1,211 @@
+################################################################################
+##
+## Filename: 	dualflexpress.txt
+##
+## Project:	A Set of Wishbone Controlled SPI Flash Controllers
+##
+## Purpose:	Describes the Dual I/O flash peripheral for AutoFPGA.
+##
+## Creator:	Dan Gisselquist, Ph.D.
+##		Gisselquist Technology, LLC
+##
+################################################################################
+##
+## Copyright (C) 2018, Gisselquist Technology, LLC
+##
+## This file is part of the set of Wishbone controlled SPI flash controllers
+## project
+##
+## The Wishbone SPI flash controller project is free software (firmware):
+## you can redistribute it and/or modify it under the terms of the GNU Lesser
+## General Public License as published by the Free Software Foundation, either
+## version 3 of the License, or (at your option) any later version.
+##
+## The Wishbone SPI flash controller project is distributed in the hope
+## that it will be useful, but WITHOUT ANY WARRANTY; without even the implied
+## warranty of MERCHANTIBILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+## GNU Lesser General Public License for more details.
+##
+## You should have received a copy of the GNU Lesser General Public License along
+## with this program.  (It's in the $(ROOT)/doc directory.  Run make with no
+## target there if the PDF file isn't present.)  If not, see
+## <http://www.gnu.org/licenses/> for a copy.
+##
+## License:	LGPL, v3, as defined and found on www.gnu.org,
+##		http://www.gnu.org/licenses/lgpl.html
+##
+##
+################################################################################
+##
+##
+@PREFIX= flash
+@DEVID=FLASH
+@ACCESS= FLASH_ACCESS
+@$LGFLASHSZ=24
+@$NADDR=(1<<(@$LGFLASHSZ-2))
+@$NBYTES=(1<<@$LGFLASHSZ)
+@NBYTES.FORMAT=0x%08x
+@ACCESS= FLASH_ACCESS
+@SLAVE.TYPE=MEMORY
+@SLAVE.BUS=wb
+@TOP.PORTLIST=
+		// Top level Quad-SPI I/O ports
+		o_dspi_cs_n, o_dspi_sck, io_dspi_dat
+@TOP.IODECL=
+	// Quad SPI flash
+	output	wire		o_dspi_cs_n;
+	output	wire		o_dspi_sck;
+	inout	wire	[1:0]	io_dspi_dat;
+@TOP.DEFNS=
+	wire		w_dspi_sck, w_dspi_cs_n;
+	wire	[1:0]	dspi_bmod;
+	wire	[1:0]	dspi_dat;
+@TOP.MAIN=
+		// Dual SPI flash
+		w_dspi_cs_n, w_dspi_sck, dspi_dat, io_dspi_dat, dspi_bmod
+@TOP.INSERT=
+	//
+	//
+	// Wires for setting up the DSPI flash wishbone peripheral
+	//
+	//
+	// DSPI)BMOD, Dual SPI bus mode, Bus modes are:
+	//	0?	Normal serial mode, one bit in one bit out
+	//	10	Dual SPI mode, going out
+	//	11	Dual SPI mode coming from the device (read mode)
+	assign io_dspi_dat = (!dspi_bmod[1])?({1'bz,dspi_dat[0]})
+				:((dspi_bmod[0])?(2'bzz):(dspi_dat[1:0]));
+	assign	o_dspi_cs_n = w_dspi_cs_n;
+
+`ifdef	XILINX
+	reg	r_dspi_sck;
+	always @(posedge clk_s)
+		r_dspi_sck <= dspi_sck;
+	xddrck	xdspi_sck({clk_s, clk_sn}, r_dspi_sck, o_dspi_sck);
+`endif
+
+@MAIN.PORTLIST=
+		// The QSPI Flash
+		o_dspi_cs_n, o_dspi_sck, o_dspi_dat, i_dspi_dat, o_dspi_mod
+@MAIN.IODECL=
+	// The QSPI flash
+	output	wire		o_dspi_cs_n, o_dspi_sck;
+	output	wire	[1:0]	o_dspi_dat;
+	input	wire	[1:0]	i_dspi_dat;
+	output	wire	[1:0]	o_dspi_mod;
+@MAIN.INSERT=
+	dualflexpress #(@$LGFLASHSZ
+`ifdef	FLASHCFG_ACCESS
+		, .OPT_CFG(1'b1)
+`else
+		, .OPT_CFG(1'b0)
+`endif
+		)
+		@$(PREFIX)i(i_clk, i_reset,
+			(wb_cyc), (wb_stb)&&(@$(PREFIX)_sel),
+			(wb_stb)&&(flashcfg_sel), wb_we,
+			wb_addr[(@$LGFLASHSZ-3):0], wb_data,
+			@$(PREFIX)_ack, @$(PREFIX)_stall, @$(PREFIX)_data,
+			o_dspi_sck, o_dspi_cs_n, o_dspi_mod, o_dspi_dat, i_dspi_dat);
+@MAIN.ALT=
+	assign	o_dspi_sck  = 1'b1;
+	assign	o_dspi_cs_n = 1'b1;
+	assign	o_dspi_mod  = 2'b01;
+	assign	o_dspi_dat  = 2'b11;
+@MEM.NAME= flash
+@MEM.ACCESS = rx
+@REGS.N= 1
+@REGDEFS.H.DEFNS=
+#define	@$(DEVID)BASE	@$[0x%08x](REGBASE)
+#define	@$(DEVID)LEN	@$NBYTES
+#define	@$(DEVID)LGLEN	@$LGFLASHSZ
+@REGS.0= 0 R_@$(DEVID) @$(DEVID)
+@BDEF.OSDEF=_BOARD_HAS_@$(DEVID)
+@BDEF.OSVAL=extern int _@$(PREFIX)[1];
+@LD.PERM=	rx
+@LD.NAME=	flash
+@SIM.INCLUDE+=
+#include "flashsim.h"
+@SIM.DEFNS+=
+#ifdef	@$(ACCESS)
+	FLASHSIM	*m_@$(MEM.NAME);
+#endif // @$(ACCESS)
+@SIM.INIT+=
+#ifdef	@$(ACCESS)
+		m_@$(MEM.NAME) = new FLASHSIM(FLASHLGLEN);
+#endif // @$(ACCESS)
+@SIM.TICK +=
+#ifdef	@$(ACCESS)
+		{ static int lastsck = 0; int idspi;
+
+			if (lastsck)
+				(*m_@$(MEM.NAME))(m_core->o_dspi_cs_n,
+					0, m_core->o_dspi_dat);
+
+			idspi = (*m_@$(MEM.NAME))(m_core->o_dspi_cs_n,
+				1, m_core->o_dspi_dat);
+
+
+			if (m_core->o_dspi_mod&2) {
+				if (m_core->o_dspi_mod&1)
+					;
+				else
+					idspi = m_core->o_dspi_dat;
+			} else {
+				idspi &= 0x002;
+				idspi |= m_core->o_dspi_dat&1;
+				idspi |= 0x0c;
+			}
+
+			m_core->i_dspi_dat = idspi;
+			lastsck = m_core->o_dspi_sck;
+		}
+#endif // @$(ACCESS)
+@SIM.LOAD +=
+#ifdef	@$(ACCESS)
+			m_@$(MEM.NAME)->load(start, &buf[offset], wlen);
+#endif // @$(ACCESS)
+##
+##
+##
+##
+## Now the control interface
+@PREFIX=flashcfg
+@NADDR= 1
+@ACCESS=FLASHCFG_ACCESS
+@DEPENDS= FLASH_ACCESS
+@DEVID=FLASHCFG
+# This cannot be a DOUBLE peripheral type, since our response may take more
+# than two clock cycles.
+@SLAVE.TYPE=OTHER
+@SLAVE.BUS=wb
+@MAIN.INSERT=
+	// The Flash control interface result comes back together with the
+	// flash interface itself.  Hence, we always return zero here.
+	assign	@$(PREFIX)_ack   = 1'b0;
+	assign	@$(PREFIX)_stall = 1'b0;
+	assign	@$(PREFIX)_data  = 0;
+@REGS.NOTE= // FLASH erase/program configuration registers
+@REGS.N=1
+@REGS.0= 0 R_FLASHCFG FLASHCFG QSPIC
+@REGDEFS.H.INSERT=
+// Flash control constants
+#define	DSPI_FLASH	// This core and hardware support a Quad SPI flash
+#define	SZPAGEB		256
+#define	PGLENB		256
+#define	SZPAGEW		64
+#define	PGLENW		64
+#define	NPAGES		256
+#define	SECTORSZB	(NPAGES * SZPAGEB)	// In bytes, not words!!
+#define	SECTORSZW	(NPAGES * SZPAGEW)	// In words
+#define	NSECTORS	64
+#define	SECTOROF(A)	((A) & (-1<<16))
+#define	SUBSECTOROF(A)	((A) & (-1<<12))
+#define	PAGEOF(A)	((A) & (-1<<8))
+
+@BDEF.IONAME= io_flctl
+@BDEF.OSDEF= _BOARD_HAS_@$(DEVID)
+@BDEF.IOTYPE=unsigned
+@BDEF.OSVAL=static volatile @$(BDEF.IOTYPE) * const @$(BDEF.IONAME) = ((@$BDEF.IOTYPE *)(@$[0x%08x](REGBASE)));
+@RTL.MAKE.GROUP= FLASH
+@RTL.MAKE.FILES= dualflexpress.v

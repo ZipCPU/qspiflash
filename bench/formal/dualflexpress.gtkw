@@ -1,0 +1,99 @@
+[*]
+[*] GTKWave Analyzer v3.3.66 (w)1999-2015 BSI
+[*] Wed Nov 21 23:34:33 2018
+[*]
+[dumpfile] "/home/dan/work/rnd/opencores/qspiflash/trunk/bench/formal/dualflexpress_prf/engine_0/trace_induct.vcd"
+[dumpfile_mtime] "Wed Nov 21 23:25:07 2018"
+[dumpfile_size] 43685
+[savefile] "/home/dan/work/rnd/opencores/qspiflash/trunk/bench/formal/dualflexpress.gtkw"
+[timestart] 190
+[size] 1925 965
+[pos] -1 -1
+*-5.000000 420 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1
+[sst_width] 196
+[signals_width] 174
+[sst_expanded] 1
+[sst_vpaned_height] 283
+@28
+dualflexpress.f_past_valid
+dualflexpress.i_reset
+dualflexpress.i_clk
+@200
+-
+@28
+dualflexpress.i_wb_cyc
+dualflexpress.i_wb_stb
+dualflexpress.i_cfg_stb
+dualflexpress.i_wb_we
+@22
+dualflexpress.i_wb_addr[21:0]
+dualflexpress.i_wb_data[31:0]
+@28
+dualflexpress.o_wb_stall
+dualflexpress.o_wb_ack
+@22
+dualflexpress.o_wb_data[31:0]
+@28
+dualflexpress.pre_ack
+@200
+-
+@28
+dualflexpress.f_nacks[1:0]
+dualflexpress.f_nreqs[1:0]
+dualflexpress.f_outstanding[1:0]
+@200
+-
+@28
+dualflexpress.o_dspi_cs_n
+dualflexpress.o_dspi_sck
+dualflexpress.o_dspi_mod[1:0]
+dualflexpress.o_dspi_dat[1:0]
+dualflexpress.i_dspi_dat[1:0]
+dualflexpress.actual_sck
+@200
+-
+@c00200
+-Maintenance
+@28
+dualflexpress.maintenance
+dualflexpress.m_clk
+dualflexpress.m_cs_n
+dualflexpress.m_dat[1:0]
+dualflexpress.m_mod[1:0]
+@22
+dualflexpress.m_data[40:0]
+@28
+dualflexpress.m_state[1:0]
+@22
+dualflexpress.m_counter[14:0]
+@1401200
+-Maintenance
+@200
+-
+@22
+dualflexpress.clk_ctr[5:0]
+@200
+-
+@28
+dualflexpress.bus_request
+dualflexpress.pipe_req
+dualflexpress.cfg_stb
+dualflexpress.user_request
+dualflexpress.cfg_noop
+@29
+dualflexpress.cfg_hs_read
+@28
+dualflexpress.cfg_hs_write
+dualflexpress.cfg_ls_write
+@200
+-
+@28
+dualflexpress.cfg_cs
+dualflexpress.cfg_dir
+dualflexpress.cfg_mode
+dualflexpress.cfg_speed
+dualflexpress.cfg_write
+@22
+dualflexpress.data_pipe[33:0]
+[pattern_trace] 1
+[pattern_trace] 0

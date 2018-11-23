@@ -1,0 +1,22 @@
+[tasks]
+prf
+cvr
+
+[options]
+prf: mode prove
+prf: depth 42
+cvr: mode cover
+cvr: depth 60
+
+[engines]
+smtbmc boolector
+
+[script]
+read -formal -DDUALFLEXPRESS fwb_slave.v
+read -formal -DDUALFLEXPRESS dualflexpress.v
+cvr: chparam -set OPT_STARTUP 0 dualflexpress
+prep -top dualflexpress
+
+[files]
+fwb_slave.v
+../../rtl/dualflexpress.v

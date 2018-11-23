@@ -1,0 +1,548 @@
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%%
+%% Filename: 	spec.tex
+%%
+%% Project:	Wishbone Controlled Quad SPI Flash Controller
+%%
+%% Purpose:	This LaTeX file contains all of the documentation/description
+%%		currently provided with this Quad SPI Flash Controller.
+%%		It's not nearly as interesting as the PDF file it creates,
+%%		so I'd recommend reading that before diving into this file.
+%%		You should be able to find the PDF file in the SVN distribution
+%%		together with this PDF file and a copy of the GPL-3.0 license
+%%		this file is distributed under.
+%%		
+%%
+%% Creator:	Dan Gisselquist
+%%		Gisselquist Technology, LLC
+%%
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%%
+%% Copyright (C) 2015,2018, Gisselquist Technology, LLC
+%%
+%% This file is part of the set of Wishbone controlled SPI flash controllers
+%% project
+%%
+%% The Wishbone SPI flash controller project is free software (firmware):
+%% you can redistribute it and/or modify it under the terms of the GNU Lesser
+%% General Public License as published by the Free Software Foundation, either
+%% version 3 of the License, or (at your option) any later version.
+%%
+%% The Wishbone SPI flash controller project is distributed in the hope
+%% that it will be useful, but WITHOUT ANY WARRANTY; without even the implied
+%% warranty of MERCHANTIBILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+%% GNU Lesser General Public License for more details.
+%%
+%% You should have received a copy of the GNU Lesser General Public License
+%% along with this program.  (It's in the $(ROOT)/doc directory.  Run make
+%% with no target there if the PDF file isn't present.)  If not, see
+%% <http://www.gnu.org/licenses/> for a copy.
+%%
+%% License:	LGPL, v3, as defined and found on www.gnu.org,
+%%		http://www.gnu.org/licenses/lgpl.html
+%%
+%%
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\documentclass{gqtekspec}
+\project{Quad SPI Flash Controller}
+\title{Specification}
+\author{Dan Gisselquist, Ph.D.}
+\email{zipcpu (at) gmail.com}
+\revision{Rev.~1.0}
+\begin{document}
+\pagestyle{gqtekspecplain}
+\titlepage
+\begin{license}
+Copyright (C) \theyear\today, Gisselquist Technology, LLC
+
+This file is part of the set of Wishbone controlled SPI flash controllers
+project.
+
+The Wishbone SPI flash controller project is free software (firmware):
+you can redistribute it and/or modify it under the terms of the GNU Lesser
+General Public License as published by the Free Software Foundation, either
+version 3 of the License, or (at your option) any later version.
+%%
+The Wishbone SPI flash controller project is distributed in the hope
+that it will be useful, but WITHOUT ANY WARRANTY; without even the implied
+warranty of MERCHANTIBILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+GNU Lesser General Public License for more details.
+%%
+You should have received a copy of the GNU Lesser General Public License
+with this program.  If not, see \texttt{http://www.gnu.org/licenses/} for a
+copy.
+\end{license}
+\begin{revisionhistory}
+1.0 & 11/22/2018 & Gisselquist & Completely updated into a more universal set of controllers\\\hline
+0.3 & 8/11/2016 & Gisselquist & Added information on the Extended Quad SPI controller\\\hline
+0.2 & 5/26/2015 & Gisselquist & Minor spelling changes\\\hline
+0.1 & 5/13/2015 & Gisselquist & First Draft \\\hline
+\end{revisionhistory}
+% Revision History
+% Table of Contents, named Contents
+\tableofcontents
+\listoffigures
+\listoftables
+\begin{preface}
+The genesis of this project was a desire to communicate with and program an
+FPGA board without the need for any proprietary tools.  This includes Xilinx
+JTAG cables, or other proprietary loading capabilities such as Digilent's
+Adept program.  As a result, all interactions with the board need to take
+place using open source tools, and the board must be able to reprogram itself.
+
+After several iterations of this controller, it has finally been rebuilt into
+a generic controller that will provide a Wishbone interface for any flash chip.
+\end{preface}
+
+\chapter{Introduction}
+\pagenumbering{arabic}
+\setcounter{page}{1}
+
+This repository of serial flash controllers has now gone through several
+iterations of development.
+
+It was initially built to support a fairly generic Spansion flash part
+with QSPI mode.  This initial interface supported four control registers,
+for erasing the flash, configuring the flash, reading from the status register,
+and reading the manufacturer's ID.  This original core worked wonderfully
+well beyond the flash part it was initially targetted for, so the core got
+wide usage.
+
+A second core was rebuilt and added to the repository to support a Micron
+flash, with the purpose of running at twice the clock rate (200MHz system
+clock, 100MHz SPI clock).  Instead of four registers, this core supported
+roughly 16 registers.  This core was only ever used on the Digilent
+Arty board, since it had way too many features for general purpose use
+and since it had a horrible latency.
+
+A third core was built for the S6SoC project.  This third core was designed
+for the absolute minimum amount of logic, and was very successful at it.
+However, since this core was read-only, it has seen been eclipsed by the
+current controllers.
+
+When it came time to build yet another flash controller, I started getting
+tired of building controllers that were specific to one flash or another.
+This is the genesis of version one of  this project.
+
+This project contains three basic flash controllers that are designed to be
+completely general purpose.  There's a basic SPI controller, a Dual SPI
+controller, and a Quad SPI controller.  All three controllers are designed
+for high speed operation using an ODDR clock.  All three controllers may
+optionally contain a configuration register to issue other-than-read commands.
+Likewise, they may optionally allow pipelined accesses whereby multiple values
+may be read without re-issuing either command or address.  Further, the
+DSPI and QSPI controllers will also use an XIP mode by default.
+
+Where the {\em universal} part of the flash controller designs breaks down
+is in the initial startup.  A configuration option can be used to remove this
+logic.  Alternatively, this startup logic is maintained within single
+generic block, allowing for easy adjustment.
+
+%%%%%%%%%%%%%%%%%%%%%%%%%
+%%%%%%%%%%%%%%%%%%%%%%%%%
+%%%%%%%%%%%%%%%%%%%%%%%%%
+%%%%%%%%%%%%%%%%%%%%%%%%%
+%%%%%%%%%%%%%%%%%%%%%%%%%
+%%%%%%%%%%%%%%%%%%%%%%%%%
+%%%%%%%%%%%%%%%%%%%%%%%%%
+
+For a description of how the internals of each core work, feel free to browse
+through the Architecture chapter.
+
+The registers that control the cores are discussed in the Registers chapter.
+
+As required, you can find a wishbone datasheet in Chapt.~\ref{chap:wishbone}.
+
+The final pertinent information for implementing the cores is found in the
+I/O Ports chapter, Chapt.~\ref{chap:ioports}.
+
+As always, write me if you have any questions or problems.
+
+\chapter{Architecture}\label{chap:arch}
+
+\section{OPT\_PIPE}
+\section{OPT\_CFG}
+\section{OPT\_STARTUP}
+\section{LGFLASHSZ}
+
+\chapter{Operation}\label{chap:ops}
+
+Each of these flash controller cores is designed to be as simple as possible
+to implement.  This means that reading from the flash is by design easy,
+but sending or receiving other commands is more involved.
+
+\section{Reading}
+
+Reading from the flash is designed to be as simple as reading from the
+Wishbone bus.
+
+\begin{itemize}
+\item[SPI] Upon a read request, the SPI controller will issue a read request,
+	{\tt 8'h03}, followed by the request address.  Once the data returns
+	from the flash, the value is returned on the bus.
+
+\item[DSPI] The DUAL spi controller is built around the understanding that
+	some startup code has already issued a Dual I/O read command
+	{\tt 8'hbb} with the mode byte set for XIP mode.  Ever after, a read
+	request results in the address (not the command) sent to the flash,
+	followed by the mode byte and then 8-dummy bits.  Values are then
+	returned on completion.
+
+\item[QSPI] The Quad SPI controller does the same as the Dual SPI controller,
+	save that the command issued is the Quad I/O read command, {\tt 8'heb}.
+\end{itemize}
+
+\section{Pipelined Reading}
+If the {\tt OPT\_PIPE} option parameter is set, then consecutive reads may be
+made without sending the address or the read command multiple times.  Using
+this mode, the various controllers can return a 32-bit value in 32 clocks (SPI
+mode), 16 clocks (Dual SPI mode), or 8 clocks (Quad SPI mode).
+
+\section{Startup}
+
+Some flash chips and implementations have a special startup sequences that
+need to be followed.  This is the purpose of the {\tt OPT\_STARTUP} parameter
+and the startup section it enables.
+
+The Dual and Quad SPI controllers have an additional startup need: they need
+the initial Dual I/O read or Quad I/O read command to be issued with a
+proper mode byte.  At the end of this command, the device will be placed into
+an eXecute In Place (XIP) mode.  From the XIP mode, read requests may start
+immediately with the address in Dual or Quad I/O mode for extra speed.
+
+\section{Low-level Control}
+
+Low level control can be accomplished through the use of the {\tt R\_FLASHCFG}
+register.  This register will allow a software program to issue any command
+to the flash and receive any result. Configuration commands are all 8-bit
+commands.  In SPI mode, the command writes the eight given bits to the
+{\tt MOSI} port, while reading the bits back from the {\tt MISO} port.
+A write to this port will initiate the transaction.  A later read will return
+the 8-bits read during that operation.
+
+For the two high speed controllers, the {\tt R\_FLASHCFG} register can also
+be used to place the controller into a high speed mode where either two
+I/O lines or all four I/O lines are used together to send or read a message.
+When a command is given for high speed operation, the command also includes
+the direction of that operation.
+
+While the {\tt R\_FLASHCFG} port is controlling the SPI controller, any
+reads from the FPGA memory will silently fail.
+
+Finally, when you are ready to return the controller to normal read
+opeartions, the Dual and Quad SPI controllers need to be placed back into
+Dual or Quad I/O Modes.
+
+\section{Low Level Examples}
+
+To use the low-level facilities, the higher speed flashes need to begin by
+taking the flash controller out of normal operating read mode.  This can
+be done by first taking control of the interface.
+
+fpga->writeio(R\_FLASHCFG, F\_END);
+
+This writes a {\tt 13'h1100} to the interface, placing it into configuration
+control.
+
+After this, writing 16-bits of zeros to the device in normal SPI mode will
+take the device out of any higher speed read mode it may have been in.  This
+equates to sending a dummy address (only every other or every fourth bit will
+be read), followed by a one on the {\tt MOSI} channel when the mode byte would
+have taken place.  Then, when the CS line is later deactivated,
+the device will be out of any XIP mode and ready for commands.
+
+fpga->writeio(R\_FLASHCFG, F\_RESET);
+fpga->writeio(R\_FLASHCFG, F\_RESET);
+fpga->writeio(R\_FLASHCFG, F\_END);
+
+The device is now ready to accept any command the underlying SPI device
+supports.
+
+For example, if we wish to issue a READID command (8'h9f), we could simply
+write
+
+m_fpga->writeio(R\_FLASHCFG, CFG_USERMODE | 0x9f); // a 16'h109f
+
+This will send the READID command to the device.  To read the command back,
+we'll need to clock the device and read one byte at a time.  The following
+therefore will read eight bits: one write request to clock the interface,
+followed by a second read request to get the data returned from the interface.
+
+m_fpga->writeio(R\_FLASHCFG, CFG_USERMODE | 0); // a 16'h1000
+r = m_fpga->readio(R\_FLASHCFG);
+
+The software flash driver will read and pack three more bytes before returning.
+
+Finally, to return the device to normal operation, we'll neeed to issue a
+highspeed read command.  The following shows a Quad I/O read command.
+
+fpga->writeio(R_FLASHCFG, QUAD_IO_READ);
+
+This is followed  by three (dummy) address bytes.
+
+// 3 address bytes
+fpga->writeio(R_FLASHCFG, CFG_USERMODE | CFG_QSPEED | CFG_WEDIR);
+fpga->writeio(R_FLASHCFG, CFG_USERMODE | CFG_QSPEED | CFG_WEDIR);
+fpga->writeio(R_FLASHCFG, CFG_USERMODE | CFG_QSPEED | CFG_WEDIR);
+
+A mode byte, 8'ha0, is required to place the device into XIP mode upon
+completion.
+
+// Mode byte
+fpga->writeio(R_FLASHCFG, CFG_USERMODE | CFG_QSPEED | CFG_WEDIR | 0xa0);
+
+At this point, we need to change direction from write to read.
+Most interfaces require a dummy byte before the read command actually begins.
+
+// Read a dummy byte
+fpga->writeio(R_FLASHCFG, CFG_USERMODE | CFG_QSPEED );
+
+Were we to continue, we'd be reading from the flash.  Instead, let's end
+our command.
+
+// Close the interface
+fpga->writeio(R_FLASHCFG, 0);
+
+\section{External Software Control}
+
+To make this easier, a universal flash driver software is provided with this
+core.  This driver requires the use of a class implementing the DEVID
+interface.  From this interface, the controller uses the {\tt readio}
+and {\tt writeio} methods to access the controller.  Reading from the
+controller is done using the {\tt readi} (read with increment) vector method.
+
+This controller has methods {\tt take\_offline()}, to remove the Dual or
+Quad SPI controllers from their high speed modes, as well as
+{\tt place\_online()} to return them to their high speed modes upon completion.
+The software uses the existence of either the {\tt DSPI\_FLASH} or the
+{\tt QSPI\_FLASH} macro to know whether to place the flash in Dual or Quad
+I/O modes upon completion.
+
+The primary entry point for this controller is the {\tt write()} method.
+The {\tt write()} method takes as an argument an address within the flash
+memory space, a length, and a buffer.  It then tries to write that buffer
+to that memory space.  To do this, it will first check to see if the flash
+configuration is set properly by calling {\tt verify\_config()}.  If not, it
+will try to {\tt set\_config()} and exit if a subsequent {\tt verify\_config()}
+fails.  It then checks through the memory region given to determine if the
+sector needs to be erased, or just programmed.
+
+If any bits within the region need to switch from zero to one, the
+{\tt write()} method will call the {\tt erase\_sector()} method with an
+address of the sector that needs to be erased.  (It doesn't support sub-sector
+erase calls.)  A {\tt verify} argument can also be given to double check that
+the erase was successful if desired.
+
+Following the (optional) {\tt erase\_sector()}, the {\tt write()} method will
+call the {\tt page\_program()} method.  This method accepts an address, length,
+and data pointer.  It will program the flash (turning ones to zeros), starting
+at the given address, using length bytes starting at the data pointer.  As
+with the {\tt erase\_sector()} command, a {\tt verify} flag may be passed to
+check that the page program command was successful.
+
+As the {\tt write()} method completes, it will issue a call to
+{\tt place\_online()} to put the flash controller back into a mode where it
+can read from the flash again.
+
+\chapter{Registers}\label{chap:regs}
+
+The three flash controller support two address spaces: a single configuration
+and control register, and the flash memory itself.  Only one can be read
+or written to at a time.  Writes to the flash memory will quietly fail with
+no error.  Reads from the flash memory while the configuration port are active
+will also quietly fail with no error.  Reads from the configuration port
+will return undefined values unless the port is in configuration mode.
+
+Table.~\ref{tbl:reglist} shows this one register.
+\begin{table}[htbp]
+\begin{center}
+\begin{reglist}
+FLASHCFG & 0 & 13 & R/W & Configuration register, for low-level control \\\hline
+\end{reglist}
+\caption{One register for all three controllers}\label{tbl:reglist}
+\end{center}\end{table}
+
+The bits within this configuration register are shown in Table~\ref{tbl:bits}.
+\begin{table}[htbp]
+\begin{center}
+\begin{bitlist}
+13-31 & & Reserved.  These bits are ignored on read and write
+	\\\hline
+12 & R/W & User mode.  True if the port being controlled by the FLASHCFG
+	register.
+	\\\hline
+11 & R/W & QUAD speed.  True if the controller supports QUAD I/O mode, and if
+	the port has been set to high speed QUAD mode.
+	\\\hline
+10 & R/W & Dual speed.  True if the controller supports DUAL I/O mode, and if
+	the port has been set to high speed DUAL mode.
+	\\\hline
+9 & R/W & High speed direction.  True if the pins of the bus are all set for
+	writing, false if they are all high impedence for reading.  This
+	pin is read-only for the SPI flash controller.
+	\\\hline
+8 & R/W & CS\_n.  If zero, the CS pin is active (low).
+	\\\hline
+0--7 & R/W & These are data lines.  A write to the SPI interface with bit 8 low
+	will write these bits to the interface using SPI mode.  Likewise,
+	for the DUAL and QUAD interfaces, a write to the register with bit
+	8 low, bit 12 high, and the speed and direction bits set will write
+	these bits at high speed across the port.  If the speed bit isn't set,
+	the direction bit will be ignored and the bits will be written using
+	SPI mode.  Once the operation is completed, any resulting bits from
+	SPI mode, or from a read operation where the direction bit was clear,
+	may be read from these bits of this register.
+	\\\hline
+\end{bitlist}
+\caption{FLASHCFG bit definitions}\label{tbl:bits}
+\end{center}\end{table}
+
+Taking the device off line in order to issue a command is slightly different
+between the SPI controller and the higher speed controllers.  With the
+SPI controller, all that needs to be done is to write to the configuration
+register with bit eight low.  This will activate the chip-select and clock
+the eight data bits out of the port.  A subsequent read may read the bits
+read during this time.
+
+With the higher speed controllers, you also need to set the user override
+mode bit.  Hence, if bit 12 is high and bit 8 is low, a message will be
+sent or received from the device.  If the speed flag is left low, the
+message will be sent in normal SPI mode.
+	
+If bit 12 is high and bit 8 is high, a high speed device will be removed
+from normal operation, but nothing will be sent to it.  Setting thedual or
+quad speed flag at thte same time will allow you to read back which of the
+two implementations was built into the design.  If the Dual Speed bit is set,
+then Dual controller is implemented within the design.  If the Quad speed bit
+is set, then the quad controller is implemented within the design.  Sadly,
+this method will not work with the SPI controller simply because commands with
+bit 8 high will be ignored, and commands with bit 8 low will send a message
+across the SPI channel.  For this reason, the software controller
+uses the {\tt DUAL_SPI} and {\tt QUAD_SPI} macros to determine speed
+instead.
+
+
+
+\chapter{Wishbone Datasheet}\label{chap:wishbone}
+Tbl.~\ref{tbl:wishbone} is required by the wishbone specification, and so 
+it is included here.
+\begin{table}[htbp]
+\begin{center}
+\begin{wishboneds}
+Revision level of wishbone & WB B4 \\\hline
+Type of interface & Slave, (Pipelind) Read/Write \\\hline
+Port size & 32--bit \\\hline
+Port granularity & 32--bit \\\hline
+Maximum Operand Size & 32--bit \\\hline
+Data transfer ordering & Big Endian \\\hline
+Clock constraints & Most serial flash chips require 100MHz or
+	slower\\\cline{2-2}
+Signal Names & \begin{tabular}{ll}
+		Signal Name & Wishbone Equivalent \\\hline
+		{\tt i\_clk}   & {\tt CLK\_I} \\
+		{\tt i\_reset} & {\tt CLK\_I} \\
+		{\tt i\_wb\_cyc} & {\tt CYC\_I} \\
+		{\tt i\_wb\_stb} & {\tt STB\_I} \\
+		{\tt i\_cfg\_stb} & {\tt STB\_I} \\
+		{\tt i\_wb\_we} & {\tt WE\_I} \\
+		{\tt i\_wb\_addr} & {\tt ADR\_I} \\
+		{\tt i\_wb\_data} & {\tt DAT\_I} \\
+		{\tt o\_wb\_ack} & {\tt ACK\_O} \\
+		{\tt o\_wb\_stall} & {\tt STALL\_O} \\
+		{\tt o\_wb\_data} & {\tt DAT\_O}
+		\end{tabular}\\\hline
+\end{wishboneds}
+\caption{Wishbone Datasheet for the basic Flash controller}\label{tbl:wishbone}
+\end{center}\end{table}
+
+\chapter{Clocks}\label{chap:clocks}
+
+These cores are based upon the existence of an ODDR controller for the clock.
+Using this ODDR part, it is possible to run the controller SCK at the system
+clock rate.  Most flash parts, however, are limited to roughly 108MHz or so.
+A safe clock speed limit should therefore be about 100MHz.
+See Table.~\ref{tbl:qspi-clocks}.
+\begin{table}[htbp]\begin{center}\begin{clocklist}
+i\_clk & External & 100 & & System clock.\\\hline
+\end{clocklist}
+\caption{Clock speeds}\label{tbl:qspi-clocks}
+\end{center}\end{table}
+
+\chapter{I/O Ports}\label{chap:ioports}
+There are two primary interfaces that these cores support: a wishbone
+interface, and the interface to the top level I/O's.  Both of these have
+their own section in the I/O port list.  For the purpose of this table,
+the wishbone interface is listed in Tbl.~\ref{tbl:iowishbone}, and the
+flash interface is listed in Tbl.~\ref{tbl:ioqspi}.  The two lines that
+don't really fit this classification are found in Tbl.~\ref{tbl:ioother}.
+\begin{table}[htbp]
+\begin{center}
+\begin{portlist}
+i\_wb\_cyc & 1 & Input & Wishbone bus cycle wire.\\\hline
+i\_wb\_data\_stb & 1 & Input & Wishbone strobe, when the access is to the data 
+		memory.\\\hline
+i\_wb\_cfg\_stb & 1 & Input & Wishbone strobe, for when the access is to 
+	the configuration register\\\hline
+i\_wb\_we & 1 & Input & Wishbone write enable, indicating a write interaction
+		to the bus.  Writes tot he memory interface will be quietly
+		ignored\\\hline
+i\_wb\_addr & 21 & Input & Wishbone address.  When accessing the configuration,
+		register, these address bits are ignored.\\\hline
+i\_wb\_data & 32 & Input & Wishbone bus data register.  Used by the
+		configuration register only.\\\hline
+o\_wb\_ack & 1 & Output & Return value acknowledging a wishbone write, or
+		signifying valid data in the case of a wishbone read request.
+		\\\hline
+o\_wb\_stall & 1 & Output & Indicates the device is not yet ready for another
+		wishbone access, effectively stalling the bus.\\\hline
+o\_wb\_data & 32 & Output & Wishbone data bus, returning data values read
+		from the interface.\\\hline
+\end{portlist}
+\caption{Wishbone I/O Ports}\label{tbl:iowishbone}
+\end{center}\end{table}
+
+While this core is wishbone compatible, there was one necessary change to
+the wishbone interface to make this possible.  That was the split of the
+strobe line into two separate lines.  The first strobe line, the data strobe,
+is used when the access is to data memory--such as a read or write (program)
+access.  The second strobe line, the control strobe, is for reads and writes
+to one of the four control registers.  By splitting these strobe lines,
+the wishbone interconnect designer may place the control registers in a
+separate location of wishbone address space from the flash memory.  It is
+an error for both strobe lines to be on at the same time.
+
+With respect to the higher speed interfaces, one piece of glue logic
+is necessary to tie the flash I/O to the in/out port at the top
+level of the device.  Specifically, the following two lines must be added at
+the top level.  First, for dual I/O,
+\begin{tabbing}
+assign {\tt io\_dspi\_dat} = \= (\~{\tt qspi\_mod[1]})?(\{1'bz,{\tt dspi\_dat[0]}\}) \hbox{\em // Serial mode} \\
+	\> :(({\tt dspi\_bmod[0]})?(2'bzz):({\tt dspi\_dat[1:0]}));
+		\hbox{\em // Dual mode}
+\end{tabbing}
+and then for quad I/O,
+\begin{tabbing}
+assign {\tt io\_qspi\_dat} = \= (\~{\tt qspi\_mod[1]})?(\{2'b11,1'bz,{\tt qspi\_dat[0]}\}) \hbox{\em // Serial mode} \\
+	\> :(({\tt qspi\_bmod[0]})?(4'bzzzz):({\tt qspi\_dat[3:0]}));
+		\hbox{\em // Quad mode}
+\end{tabbing}
+These provide the transition between the input and output ports used by this 
+core, and the bi--directional inout ports used by the actual part.  Further,
+because the two additional lines are defined to be ones during serial I/O
+mode, the hold and write protect lines are effectively eliminated in this
+design in favor of faster speed I/O (i.e., Quad I/O).
+
+Finally, the clock line is not specific to the wishbone bus, and the interrupt
+line is not specific to any of the above.  These have been separated out here.
+\begin{table}[htbp]
+\begin{center}
+\begin{portlist}
+i\_clk & 1 & Input & The 100~MHz clock driving all SPI interactions.\\\hline
+\end{portlist}
+\caption{Other I/O Ports}\label{tbl:ioother}
+\end{center}\end{table}
+% Appendices
+% Index
+\end{document}
+
+

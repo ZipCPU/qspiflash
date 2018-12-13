@@ -78,10 +78,41 @@ module	qflexpress(i_clk, i_reset,
 			o_wb_ack, o_wb_stall, o_wb_data,
 		o_qspi_sck, o_qspi_cs_n, o_qspi_mod, o_qspi_dat, i_qspi_dat);
 	//
+	// LGFLASHSZ is the size of the flash memory.  It defines the number
+	// of bits in the address register and more.  This controller will only
+	// support flashes with 24-bit or less addresses--it doesn't support
+	// the 32-bit address flash chips.
 	parameter	LGFLASHSZ=24;
+	//
+	// OPT_STARTUP enables the configuration logic port, and hence the
+	// ability to erase and program the flash, as well as the ability
+	// to perform other commands such as read-manufacturer ID, adjust
+	// configuration registers, etc.
 	parameter [0:0]	OPT_PIPE    = 1'b1;
+	//
+	// OPT_STARTUP enables the configuration logic port, and hence the
+	// ability to erase and program the flash, as well as the ability
+	// to perform other commands such as read-manufacturer ID, adjust
+	// configuration registers, etc.
 	parameter [0:0]	OPT_CFG     = 1'b1;
+	//
+	// OPT_STARTUP enables the startup logic
 	parameter [0:0]	OPT_STARTUP = 1'b1;
+	//
+	// CKDELAY is the number of clock delays from when o_qspi_sck is set
+	// until the actual clock takes place.  Values of 0 and 1 have been
+	// verified.  CKDELAY = 2 isn't fully supported.
+	parameter	CKDELAY = 1;
+	//
+	// RDDELAY is the number of clock cycles from when o_qspi_dat is valid
+	// until i_qspi_dat is valid.  Read delays from 0-4 have been verified
+	parameter	RDDELAY = 3;
+	//
+	// NDUMMY is the number of "dummy" clock cycles between the 24-bits of
+	// the Quad I/O address and the first data bits.  This includes the
+	// two clocks of the Quad output mode byte, 0xa0
+	// 
+	parameter	NDUMMY = 10;
 	//
 	localparam [4:0]	CFG_MODE =	12;
 	localparam [4:0]	QSPEED_BIT = 	11;
@@ -98,6 +129,11 @@ module	qflexpress(i_clk, i_reset,
 	localparam	AW=LGFLASHSZ-2;
 	localparam	DW=32;
 	//
+`ifdef	FORMAL
+	localparam	F_LGDEPTH=$clog2(3+RDDELAY);
+`endif
+	//
+	//
 	input	wire			i_clk, i_reset;
 	//
 	input	wire			i_wb_cyc, i_wb_stb, i_cfg_stb, i_wb_we;
@@ -113,6 +149,7 @@ module	qflexpress(i_clk, i_reset,
 	output	wire	[3:0]	o_qspi_dat;
 	input	wire	[3:0]	i_qspi_dat;
 
+	reg		dly_ack, read_sck, xtra_stall;
 	reg	[4:0]	clk_ctr;
 
 	//
@@ -142,18 +179,26 @@ module	qflexpress(i_clk, i_reset,
 	// Maintenance / startup portion
 	//
 	//
+	//	= CKDELAY bits
+	//	+ (used internally) (1)
+	//	+ CMD bits   ( 8)
+	//	+ ADDR bits  (24)
+	//	+ MODE BYTES ( 4) (others are zero)
+	localparam	MBITS = 1+8+24+4+CKDELAY;
+
 	reg		maintenance;
 	reg	[14:0]	m_counter;
 	reg	[1:0]	m_state;
 	reg	[1:0]	m_mod;
 	reg		m_cs_n;
 	reg		m_clk;
-	reg	[40:0]	m_data;
+	reg	[MBITS-1:0]	m_data;
 	wire	[3:0]	m_dat;
 
 	generate if (OPT_STARTUP)
 	begin : GEN_STARTUP
 
+		//
 		initial	maintenance = 1'b1;
 		initial	m_counter   = 0;
 		initial	m_state     = 2'b00;
@@ -167,7 +212,7 @@ module	qflexpress(i_clk, i_reset,
 			m_state     <= 2'b00;
 			m_cs_n <= 1'b1;
 			m_clk  <= 1'b0;
-			m_data <= 41'h1_ff_ff_ff_ff_ff;
+			m_data <= {(MBITS){1'b1}};
 			m_mod  <= NORMAL_SPI; // Normal SPI mode
 		end else begin
 			if (maintenance)
@@ -199,8 +244,9 @@ module	qflexpress(i_clk, i_reset,
 				// 1111 ==> 17 * 4 clocks, or 68 clocks in total
 				//
 				// 8'hEB is a quad I/O read command
-				m_data <= { 2'b11, QIO_READ_CMD,
-							28'h00_00_00_a, 3'h0 };
+				m_data <= 0;
+				m_data[36:0]<={1'b1,QIO_READ_CMD,24'h00_00_00,4'ha };
+
 				if (m_counter[14:0] == 15'd138)
 					m_state <= 2'b10;
 				m_cs_n <= m_counter[2];
@@ -214,8 +260,9 @@ module	qflexpress(i_clk, i_reset,
 					m_state <= 2'b11;
 				m_cs_n <= 1'b1;	// Rest the interface
 				m_clk  <= 1'b0;
-				m_data <= { 2'b11, QIO_READ_CMD, 24'h00,
-						4'ha, 3'b0 };
+				m_data <= 0;
+				m_data[36:0]<={1'b1,QIO_READ_CMD,24'h00_00_00,4'ha };
+
 				m_mod <= NORMAL_SPI;
 				end
 			2'b11: begin
@@ -223,16 +270,16 @@ module	qflexpress(i_clk, i_reset,
 				if (m_counter[14:0] == 15'd138+15'd48+15'd37)
 					maintenance <= 1'b0;
 				m_clk  <= 1'b1;
-				if (m_counter[14:0] < 15'd138 + 15'd48+15'd10)
+				if (m_counter[14:0] < 15'd138 + 15'd48+15'd9+CKDELAY)
 					m_mod <= NORMAL_SPI;
-				else if (m_counter[14:0] < 15'd138 + 15'd48+15'd26)
+				else if (m_counter[14:0] < 15'd138 + 15'd48+15'd25+CKDELAY)
 					m_mod <= QUAD_WRITE;
 				else
 					m_mod <= QUAD_READ;
 				if (m_mod[1])
-					m_data <= {m_data[36:0], 4'h0};
+					m_data <= {m_data[MBITS-5:0], 4'h0};
 				else
-					m_data <= {m_data[39:0], 1'h0};
+					m_data <= {m_data[MBITS-2:0], 1'h0};
 				if (m_counter[14:0] >= 15'd138+15'd48+15'd33)
 				begin
 					m_cs_n <= 1'b1;
@@ -249,35 +296,39 @@ module	qflexpress(i_clk, i_reset,
 		always @(*)
 		begin
 			maintenance = 0;
-			m_counter = 0;
-			m_state = 2'b11;
-			m_mod = 2'b00;
-			m_cs_n = 1'b1;
-			m_clk  = 1'b0;
-			m_data = 41'h0;
+			m_counter   = 0;
+			m_state     = 2'b11;
+			m_mod       = 2'b00;
+			m_cs_n      = 1'b1;
+			m_clk       = 1'b0;
+			m_data      = 0;
 		end
 
 		// verilator lint_off UNUSED
-		wire	[55:0] unused_maintenance;
+		wire	[MBITS+4+4+2+1+15-1:0] unused_maintenance;
 		assign	unused_maintenance = { maintenance, m_counter, m_state,
 					m_mod, m_cs_n, m_clk, m_data, m_dat };
 		// verilator lint_on  UNUSED
 	end endgenerate
 
-	assign	m_dat = (m_mod[1]) ? m_data[40:37] : { (4){m_data[40]} };
+	assign	m_dat = (m_mod[1]) ? m_data[MBITS-1:MBITS-4]
+				: { (4){m_data[MBITS-1]} };
 
 	//
 	//
 	// Data / access portion
 	//
 	//
-	reg	[35:0]	data_pipe;
+	reg	[(32+4*CKDELAY)-1:0]	data_pipe;
 	initial	data_pipe = 0;
 	always @(posedge i_clk)
 	begin
 		if (!o_wb_stall)
 		begin
-			data_pipe <= { 4'b00, {(24-LGFLASHSZ){1'b0}},
+			// Set the high bits to zero initially
+			data_pipe[(32+4*CKDELAY)-1:0] <= 0;
+
+			data_pipe[31:0] <= { {(24-LGFLASHSZ){1'b0}},
 					i_wb_addr, 2'b00, 4'ha, 4'h0 };
 
 			if (cfg_write)
@@ -295,13 +346,13 @@ module	qflexpress(i_clk, i_reset,
 				data_pipe[ 0] <= i_wb_data[0];
 			end
 		end else // if (o_wb_stall)
-			data_pipe <= { data_pipe[31:0], 4'h0 };
+			data_pipe <= { data_pipe[(32+4*(CKDELAY-1))-1:0], 4'h0 };
 
 		if (maintenance)
-			data_pipe[35:32] <= m_dat;
+			data_pipe[(32+4*CKDELAY-1):(28+4*CKDELAY)] <= m_dat;
 	end
 
-	assign	o_qspi_dat = data_pipe[35:32];
+	assign	o_qspi_dat = data_pipe[(32+4*CKDELAY-1):(28+4*CKDELAY)];
 
 	// Since we can't abort any transaction once started, without
 	// risking losing XIP mode or any other mode we might be in, we'll
@@ -347,13 +398,13 @@ module	qflexpress(i_clk, i_reset,
 	if ((i_reset)||(maintenance))
 		clk_ctr <= 0;
 	else if ((bus_request)&&(!pipe_req))
-		clk_ctr <= 5'd21;
+		clk_ctr <= 5'd14 + CKDELAY + NDUMMY;
 	else if (bus_request) // && pipe_req
 		clk_ctr <= 5'd8;
 	else if (cfg_ls_write)
-		clk_ctr <= 5'd9;
+		clk_ctr <= 5'd8 + CKDELAY;
 	else if (cfg_write)
-		clk_ctr <= 5'd3;
+		clk_ctr <= 5'd2 + CKDELAY;
 	else if (|clk_ctr)
 		clk_ctr <= clk_ctr - 1'b1;
 
@@ -365,7 +416,10 @@ module	qflexpress(i_clk, i_reset,
 		o_qspi_sck <= m_clk;
 	else if ((bus_request)||(cfg_write))
 		o_qspi_sck <= 1'b1;
-	else if (clk_ctr[4:0] > 5'd2)
+	else if ((cfg_mode)&&(clk_ctr <= CKDELAY+1))
+		// Config mode has no pipe instructions
+		o_qspi_sck <= 1'b0;
+	else if (clk_ctr[4:0] > 5'd1 + CKDELAY)
 		o_qspi_sck <= 1'b1;
 	else if ((clk_ctr[4:0] == 5'd2)&&(pipe_req))
 		o_qspi_sck <= 1'b1;
@@ -412,39 +466,146 @@ module	qflexpress(i_clk, i_reset,
 	always @(posedge i_clk)
 	if (i_reset)
 		o_wb_stall <= 1'b1;
-	else if ((maintenance)||(cfg_write)||(bus_request))
+	else if (maintenance)
+		o_wb_stall <= 1'b1;
+	else if ((RDDELAY > 0)&&((i_cfg_stb)||(i_wb_stb))&&(!o_wb_stall))
+		o_wb_stall <= 1'b1;
+	else if ((RDDELAY == 0)&&((cfg_write)||(bus_request)))
 		o_wb_stall <= 1'b1;
 	else if ((i_wb_stb)&&(pipe_req)&&(clk_ctr == 5'd2))
 		o_wb_stall <= 1'b0;
-	else if (clk_ctr > 1)
+	else if ((clk_ctr > 1)||(xtra_stall))
 		o_wb_stall <= 1'b1;
 	else
 		o_wb_stall <= 1'b0;
 
-	initial	o_wb_ack = 1'b0;
+	initial	dly_ack = 1'b0;
 	always @(posedge i_clk)
 	if (i_reset)
-		o_wb_ack <= 1'b0;
+		dly_ack <= 1'b0;
 	else if (clk_ctr == 1)
-		o_wb_ack <= (i_wb_cyc)&&(pre_ack);
+		dly_ack <= (i_wb_cyc)&&(pre_ack);
 	else if ((i_wb_stb)&&(!o_wb_stall)&&(!bus_request))
-		o_wb_ack <= 1'b1;
+		dly_ack <= 1'b1;
 	else if (cfg_noop)
-		o_wb_ack <= 1'b1;
+		dly_ack <= 1'b1;
 	else
-		o_wb_ack <= 1'b0;
+		dly_ack <= 1'b0;
 
 	reg	actual_sck;
-	initial	actual_sck = 1'b0;
-	always @(posedge i_clk)
-	if ((i_reset)&&(o_qspi_cs_n))
-		actual_sck <= 1'b0;
-	else
-		actual_sck <= o_qspi_sck;
+	generate if (CKDELAY == 0)
+	begin
+
+		always @(*)
+			actual_sck = o_qspi_sck;
+
+	end else if (CKDELAY == 1)
+	begin
+
+		initial	actual_sck = 1'b0;
+		always @(posedge i_clk)
+		if ((i_reset)&&(o_qspi_cs_n))
+			actual_sck <= 1'b0;
+		else
+			actual_sck <= o_qspi_sck;
+
+	end else begin
+
+		reg	[CKDELAY-2:0] sck_delay;
+
+		initial	actual_sck = 1'b0;
+		always @(posedge i_clk)
+		if ((i_reset)&&(o_qspi_cs_n))
+			{ actual_sck, sck_delay } <= 0;
+		else
+			{ actual_sck, sck_delay } <= { sck_delay, o_qspi_sck };
+
+	end endgenerate
+
+`ifdef	FORMAL
+	reg	[F_LGDEPTH-1:0]	f_extra;
+`endif
+
+	generate if (RDDELAY == 0)
+	begin
+
+		always @(*)
+		begin
+			read_sck = actual_sck;
+			o_wb_ack = dly_ack;
+			xtra_stall = 1'b0;
+		end
+
+`ifdef	FORMAL
+		always @(*)
+			f_extra = 0;
+`endif
+
+	end else if (RDDELAY == 1)
+	begin
+
+		initial	read_sck   = 1'b0;
+		initial	o_wb_ack   = 1'b0;
+		always @(posedge i_clk)
+		begin
+			read_sck <= actual_sck;
+			o_wb_ack <= (!i_reset)&&(i_wb_cyc)&&(dly_ack);
+			xtra_stall <= (clk_ctr > 1);
+		end
+
+`ifdef	FORMAL
+		always @(*)
+		if (!i_wb_cyc)
+			f_extra = 0;
+		else
+			f_extra = (o_wb_ack) ? 1 : 0;
+`endif
+
+	end else begin
+		// RDDELAY > 2 not (yet) supported
+		reg	[RDDELAY-2:0] ack_pipe, read_sck_pipe;
+
+		initial	{ o_wb_ack, ack_pipe } = 0;
+		always @(posedge i_clk)
+		if ((i_reset)||(!i_wb_cyc))
+			{ o_wb_ack, ack_pipe } <= 0;
+		else
+			{ o_wb_ack, ack_pipe } <= { ack_pipe, dly_ack };
+
+		initial	{ read_sck, read_sck_pipe } = 0;
+		always @(posedge i_clk)
+			{ read_sck, read_sck_pipe } <= { read_sck_pipe, actual_sck };
+
+		always @(posedge i_clk)
+		if ((i_reset)||(!i_wb_cyc))
+			xtra_stall <= 1'b0;
+		else begin
+			xtra_stall <= dly_ack;
+			if ((i_wb_stb||i_cfg_stb)&&(!o_wb_stall))
+				xtra_stall <= 1'b1;;
+			if (clk_ctr > 0)
+				xtra_stall <= 1'b1;
+			if ((RDDELAY>3)&&(|ack_pipe[RDDELAY-4:0]))
+				xtra_stall <= 1'b1;
+		end
+
+`ifdef	FORMAL
+		integer	k;
+		always @(*)
+		if (!i_wb_cyc)
+			f_extra = 0;
+		else begin
+			f_extra = (o_wb_ack) ? 1 : 0;
+			for(k=0; k<RDDELAY-1; k=k+1)
+				f_extra = f_extra + (ack_pipe[k] ? 1 : 0);
+		end
+`endif
+
+	end endgenerate
 
 	always @(posedge i_clk)
 	begin
-		if (actual_sck)
+		if (read_sck)
 		begin
 			if (!o_qspi_mod[1])
 				o_wb_data <= { o_wb_data[30:0], i_qspi_dat[1] };
@@ -453,7 +614,7 @@ module	qflexpress(i_clk, i_reset,
 		end
 
 		if ((OPT_CFG)&&((cfg_mode)||((i_cfg_stb)&&(!o_wb_stall))))
-			o_wb_data[12:8] <= { cfg_mode, cfg_speed, 1'b0,
+			o_wb_data[16:8] <= { 4'b0, cfg_mode, cfg_speed, 1'b0,
 				cfg_dir, cfg_cs };
 	end
 
@@ -496,7 +657,6 @@ module	qflexpress(i_clk, i_reset,
 	// verilator lint_on  UNUSED
 
 `ifdef	FORMAL
-	localparam	F_LGDEPTH=2;
 	reg	f_past_valid;
 	wire	[(F_LGDEPTH-1):0]	f_nreqs, f_nacks,
 					f_outstanding;
@@ -544,8 +704,8 @@ module	qflexpress(i_clk, i_reset,
 		`ASSUME(i_cfg_stb);
 
 	fwb_slave #(.AW(AW), .DW(DW),.F_LGDEPTH(F_LGDEPTH),
-			.F_MAX_STALL(22),
-			.F_MAX_ACK_DELAY(21),
+			.F_MAX_STALL(15+CKDELAY+NDUMMY+RDDELAY),
+			.F_MAX_ACK_DELAY(14+CKDELAY+NDUMMY+RDDELAY),
 			.F_OPT_RMW_BUS_OPTION(0),
 			.F_OPT_CLK2FFLOGIC(1'b0),
 			.F_OPT_DISCONTINUOUS(1))
@@ -556,14 +716,11 @@ module	qflexpress(i_clk, i_reset,
 			f_nreqs, f_nacks, f_outstanding);
 
 	always @(*)
-		assert(f_outstanding <= 2);
-
-	always @(posedge i_clk)
-		assert((f_outstanding <= 1)||((o_wb_ack)&&(!o_qspi_cs_n)));
+		assert(f_outstanding <= 2 + f_extra);
 
 	always @(posedge i_clk)
 	if ((f_past_valid)&&(!$past(i_wb_stb))||($past(o_wb_stall)))
-		assert(f_outstanding <= 1);
+		assert(f_outstanding <= 1 + f_extra);
 
 	always @(*)
 	if (maintenance)
@@ -604,32 +761,41 @@ module	qflexpress(i_clk, i_reset,
 	end
 
 	always @(posedge i_clk)
-	if (o_wb_ack)
+	if (dly_ack)
 		assert(clk_ctr[2:0] == 0);
+
+	// Zero cycle requests
+	always @(posedge i_clk)
+	if ((f_past_valid)&&(!$past(i_reset))&&(($past(cfg_noop))
+			||($past(i_wb_stb && i_wb_we && !o_wb_stall))))
+		assert((dly_ack)&&((!i_wb_cyc)
+			||(f_outstanding == 1 + f_extra)));
 
 	always @(posedge i_clk)
 	if ((f_outstanding > 0)&&(clk_ctr > 0))
 		assert(pre_ack);
-	always @(posedge i_clk)
-	if ((i_wb_cyc)&&(o_wb_ack))
-		assert(f_outstanding >= 1);
 
 	always @(posedge i_clk)
-	if ((f_past_valid)&&(clk_ctr == 0)&&(!o_wb_ack)
+	if ((i_wb_cyc)&&(dly_ack))
+		assert(f_outstanding >= 1 + f_extra);
+
+	always @(posedge i_clk)
+	if ((f_past_valid)&&(clk_ctr == 0)&&(!dly_ack)
 			&&((!$past(i_wb_stb|i_cfg_stb))||($past(o_wb_stall))))
-		assert(f_outstanding == 0);
+		assert(f_outstanding == f_extra);
 
 	always @(*)
 	if ((i_wb_cyc)&&(pre_ack)&&(!o_qspi_cs_n))
-		assert((f_outstanding >= 1)||((OPT_CFG)&&(cfg_mode)));
+		assert((f_outstanding >= 1 + f_extra)||((OPT_CFG)&&(cfg_mode)));
 
 	always @(*)
-	if ((cfg_mode)&&(!o_wb_ack)&&(clk_ctr == 0))
-		assert(f_outstanding == 0);
+	if ((cfg_mode)&&(!dly_ack)&&(clk_ctr == 0))
+		assert(f_outstanding == f_extra);
 
 	always @(*)
 	if (cfg_mode)
-		assert(f_outstanding <= 1);
+		assert(f_outstanding <= 1 + f_extra);
+
 	/////////////////
 	//
 	// Idle channel
@@ -648,7 +814,7 @@ module	qflexpress(i_clk, i_reset,
 		assert(o_qspi_mod != 2'b01);
 
 	always @(*)
-	if (clk_ctr > 5'h9)
+	if (clk_ctr > 5'h8+CKDELAY)
 	begin
 		assert(!cfg_mode);
 		assert(!cfg_cs);
@@ -665,23 +831,32 @@ module	qflexpress(i_clk, i_reset,
 	begin
 		assert(!o_qspi_cs_n);
 		assert(o_qspi_sck == 1'b1);
-		assert(o_qspi_dat == 2'b00);
+		if (CKDELAY > 0)
+		begin
+			assert(o_qspi_dat == 2'b00);
+		end
 		//
 		if (!$past(o_qspi_cs_n))
 		begin
 			assert(clk_ctr == 5'd8);
 			assert(o_qspi_mod == QUAD_READ);
 		end else begin
-			assert(clk_ctr == 5'd21);
+			assert(clk_ctr == 5'd14+CKDELAY + NDUMMY);
 			assert(o_qspi_mod == QUAD_WRITE);
 		end
 	end
 
 	always @(*)
-		assert(clk_ctr <= 5'd21);
+		assert(clk_ctr <= 5'd18+CKDELAY + NDUMMY);
 
 	always @(*)
-	if ((o_wb_ack)&&(clk_ctr == 0))
+	if (!o_qspi_cs_n)
+		assert((o_qspi_sck)||(actual_sck)||(cfg_mode)||(maintenance));
+	// else if (cfg_mode)
+	//	assert((!o_qspi_sck)&&(!actual_sck));
+
+	always @(*)
+	if ((RDDELAY == 0)&&((dly_ack)&&(clk_ctr == 0)))
 		assert(!o_wb_stall);
 
 	always @(*)
@@ -728,7 +903,7 @@ module	qflexpress(i_clk, i_reset,
 	always @(posedge i_clk)
 		cover((f_past_valid)&&(o_wb_ack));
 
-	// always @(posedge i_clk) cover((o_wb_ack)&&(f_second_ack));
+	// always @(posedge i_clk) cover((dly_ack)&&(f_second_ack));
 
 `ifdef	VERIFIC
 
@@ -745,58 +920,58 @@ module	qflexpress(i_clk, i_reset,
 	// Bus write request ... immediately ack
 	assert property (@(posedge i_clk)
 		(!i_reset)&&(i_wb_stb)&&(!o_wb_stall)&&(i_wb_we)
-		|=> (o_wb_ack)&&($stable(o_qspi_cs_n))&&(!o_qspi_sck));
+		|=> (dly_ack)&&($stable(o_qspi_cs_n))&&(!o_qspi_sck));
 
 	// Bus read request during cfg mode ... immediately ack
 	assert property (@(posedge i_clk)
 		(!i_reset)&&(i_wb_stb)&&(!o_wb_stall)&&(!i_wb_we)&&(cfg_mode)
-		|=> (o_wb_ack)&&($stable(o_qspi_cs_n))&&(!o_qspi_sck));
+		|=> (dly_ack)&&($stable(o_qspi_cs_n))&&(!o_qspi_sck));
 
 	sequence	READ_REQUEST(ADDR);
 		((o_wb_stall)&&(!o_qspi_cs_n)&&(o_qspi_sck)
-				&&(o_qspi_mod == QUAD_WRITE)&&(!o_wb_ack))
+				&&(o_qspi_mod == QUAD_WRITE)&&(!dly_ack))
 			throughout
-			(o_qspi_dat == 4'h0)&&(clk_ctr==5'd21)
-			##1 (o_qspi_dat == ADDR[21:18])&&(clk_ctr==5'd20)
-			##1 (o_qspi_dat == ADDR[17:14])&&(clk_ctr==5'd19)
-			##1 (o_qspi_dat == ADDR[13:10])&&(clk_ctr==5'd18)
-			##1 (o_qspi_dat == ADDR[ 9: 6])&&(clk_ctr==6'd17)
-			##1 (o_qspi_dat == ADDR[ 5: 2])&&(clk_ctr==5'd16)
-			##1 (o_qspi_dat =={ADDR[1:0],2'b00})&&(clk_ctr==5'd15);
+			(o_qspi_dat == 4'h0) [*CKDELAY]
+			##1 (o_qspi_dat == ADDR[21:18])&&(clk_ctr==5'd14+NDUMMY)
+			##1 (o_qspi_dat == ADDR[17:14])&&(clk_ctr==5'd13+NDUMMY)
+			##1 (o_qspi_dat == ADDR[13:10])&&(clk_ctr==5'd12+NDUMMY)
+			##1 (o_qspi_dat == ADDR[ 9: 6])&&(clk_ctr==6'd11+NDUMMY)
+			##1 (o_qspi_dat == ADDR[ 5: 2])&&(clk_ctr==5'd10+NDUMMY)
+			##1 (o_qspi_dat =={ADDR[1:0],2'b00})&&(clk_ctr==5'd9+NDUMMY);
 	endsequence;
 
 	sequence	MODE_BYTE;
 		((o_wb_stall)&&(!o_qspi_cs_n)&&(o_qspi_sck)
-				&&(o_qspi_mod == QUAD_WRITE)&&(!o_wb_ack))
+				&&(o_qspi_mod == QUAD_WRITE)&&(!dly_ack))
 			throughout
 			// Mode nibble 1
-			(o_qspi_dat == 4'ha)&&(clk_ctr == 5'd14)
+			(o_qspi_dat == 4'ha)&&(clk_ctr == 5'd8+NDUMMY)
 			// Mode nibble 2
-			##1 (o_qspi_dat == 4'h0)&&(clk_ctr == 5'd13);
+			##1 (o_qspi_dat == 4'h0)&&(clk_ctr == 5'd7+NDUMMY);
 	endsequence
 
 	sequence	DUMMY_BYTES;
 		((o_wb_stall)&&(!o_qspi_cs_n)&&(o_qspi_sck)
-				&&(o_qspi_mod == QUAD_WRITE)&&(!o_wb_ack))
+				&&(o_qspi_mod == QUAD_WRITE)&&(!dly_ack))
 			throughout
 			// (o_qspi_dat == 4'h0) [*4];
-			(o_qspi_dat == 4'h0)&&(clk_ctr == 5'd12)
-			##1 (o_qspi_dat == 4'h0)&&(clk_ctr == 5'd11)
-			##1 (o_qspi_dat == 4'h0)&&(clk_ctr == 5'd10)
+			(o_qspi_dat == 4'h0) [*NDUMMY-3]
 			##1 (o_qspi_dat == 4'h0)&&(clk_ctr == 5'd9);
 	endsequence;
 
 	sequence	READ_WORD;
-		((!o_qspi_cs_n)&&(!o_wb_ack)
+		((!o_qspi_cs_n)&&(!dly_ack)
 			&&(o_qspi_mod == QUAD_READ)) throughout
 		(o_wb_stall)&&(o_qspi_sck)&&(clk_ctr == 5'h8)
 		##1 ((o_wb_stall)&&(o_qspi_sck)) [*6]
-		##1 (o_qspi_sck==(i_wb_stb && !o_wb_stall))&&(clk_ctr==5'd1)
-			&&((OPT_PIPE)||((!o_qspi_sck)&&(o_wb_stall)));
+		##1 ((OPT_PIPE)||(o_wb_stall))&&(clk_ctr == 5'd1)
+		    &&(((CKDELAY == 0)&&(o_qspi_sck))
+			||((CKDELAY > 0)&&((OPT_PIPE)||(!o_qspi_sck))));
 	endsequence;
 
 	sequence	ACK_WORD;
-		((o_wb_ack)||(!$past(pre_ack))||($past(!i_wb_cyc)))
+		1'b1 [*RDDELAY]
+		##1 (o_wb_ack)
 			&&(o_wb_data[31:28] == $past(i_qspi_dat,8))
 			&&(o_wb_data[27:24] == $past(i_qspi_dat,7))
 			&&(o_wb_data[23:20] == $past(i_qspi_dat,6))
@@ -809,7 +984,7 @@ module	qflexpress(i_clk, i_reset,
 
 	// Proper Bus read request
 	property BUS_READ;
-		disable iff (i_reset)
+		disable iff ((i_reset)||(!i_wb_cyc))
 		(i_wb_stb)&&(!o_wb_stall)&&(!i_wb_we)&&(!cfg_mode)
 			&&(o_qspi_cs_n)
 		|=> READ_REQUEST(fv_addr)
@@ -823,11 +998,10 @@ module	qflexpress(i_clk, i_reset,
 		(!o_qspi_cs_n)&&(o_qspi_mod == QUAD_READ)&&(!cfg_mode)
 			throughout
 		(((o_wb_stall)&&(o_qspi_sck)
-				&&(o_wb_ack))
-				&&((f_outstanding == 2)||(!i_wb_cyc))
+				&&(dly_ack))
+				&&((f_outstanding == 2 + f_extra)||(!i_wb_cyc))
 				&&(clk_ctr == 5'd8))
-		##1 ((!o_wb_ack)
-			&&((f_outstanding== 1)||(!pre_ack)||(!i_wb_cyc)))
+		##1 ((!dly_ack)&&(f_outstanding == 1 + f_extra))
 			throughout
 		((o_wb_stall)&&(o_qspi_sck)
 				&&(clk_ctr > 1)&&(clk_ctr < 5'd8)
@@ -839,7 +1013,7 @@ module	qflexpress(i_clk, i_reset,
 
 	// Bus pipe-read request
 	property PIPED_READ;
-		disable iff (i_reset)
+		disable iff ((i_reset)||(!i_wb_cyc))
 		(i_wb_stb)&&(!o_wb_stall)&&(!i_wb_we)&&(!cfg_mode)
 			&&(!o_qspi_cs_n)&&(OPT_PIPE)
 		|=> PIPED_READ_SEQUENCE
@@ -865,7 +1039,7 @@ module	qflexpress(i_clk, i_reset,
 			&&(cfg_mode)&&(!cfg_speed))
 			throughout
 		((o_qspi_sck) throughout
-		((o_qspi_dat[0] == 1'b0)&&(clk_ctr == 5'd9))
+		(o_qspi_dat[0] == 1'b0) [*CKDELAY]
 		##1 ((o_qspi_dat[0] == fv_data[7])&&(clk_ctr == 5'd8))
 		##1 ((o_qspi_dat[0] == fv_data[6])&&(clk_ctr == 5'd7))
 		##1 ((o_qspi_dat[0] == fv_data[5])&&(clk_ctr == 5'd6))
@@ -883,13 +1057,12 @@ module	qflexpress(i_clk, i_reset,
 			&&(o_qspi_mod == QUAD_WRITE)&&(!o_wb_ack)
 			&&(cfg_mode)&&(cfg_speed)&&(cfg_dir))
 			throughout
-		((o_qspi_dat[3:0] == 4'b00)&&(clk_ctr == 5'd3)&&(o_qspi_sck))
-		##1 ((o_qspi_dat[3:0]==$past(i_wb_data[7:4],2))
+		(o_qspi_dat[3:0] == 4'b00)&&(o_qspi_sck) [*CKDELAY]
+		##1 (o_qspi_dat[3:0]==$past(i_wb_data[7:4],2))
 				&&(clk_ctr== 5'd2)
-				&&(o_qspi_sck))
-		##1 ((o_qspi_dat[3:0]==$past(i_wb_data[3:0],3))
+		##1 (o_qspi_dat[3:0]==$past(i_wb_data[3:0],3))
 				&&(clk_ctr== 5'd1)
-				&&(!o_qspi_sck)&&(actual_sck));
+				&&(actual_sck);
 	endsequence
 
 	sequence	QSPI_CFG_READ_SEQ;
@@ -932,42 +1105,201 @@ module	qflexpress(i_clk, i_reset,
 
 	// Config write-HS request
 	property QSPI_CFG_WRITE;
-		disable iff (i_reset)
+		disable iff ((i_reset)||(!i_wb_cyc))
 		(cfg_hs_write)
-		|=> QSPI_CFG_WRITE_SEQ
-		##1((o_wb_ack)||(!$past(pre_ack))||(!$past(i_wb_cyc)))
-			&&(o_wb_data[12:8]==5'b11011);
+		|=> ((pre_ack) throughout QSPI_CFG_WRITE_SEQ)
+		##1 (o_wb_data[12:8] == 5'b11011) [*(RDDELAY-1)]
+		##1 (o_wb_ack)&&(o_wb_data[12:8]==5'b11011);
 	endproperty
 
 	// Config release request
 	property CFG_RELEASE;
+		disable iff ((i_reset)||(!i_wb_cyc))
 		(OPT_CFG)&&(!i_reset)&&(i_cfg_stb)&&(!o_wb_stall)&&(i_wb_we)
 				&&(i_wb_data[USER_CS_n])
-		|=> (o_wb_ack)&&(o_qspi_cs_n)&&(!cfg_cs)
-			&&(clk_ctr == 0)
-			&&(cfg_mode==$past(i_wb_data[CFG_MODE]));
+		|=> (o_qspi_cs_n)&&(!cfg_cs)&&(clk_ctr == 0)
+			&&(cfg_mode == $past(i_wb_data[CFG_MODE]))
+		##1 1'b1 [*(RDDELAY-1)]
+		##1 (o_wb_ack);
 	endproperty
 
 	property CFG_READBUS_NOOP;
+		disable iff ((i_reset)||(!i_wb_cyc))
 		(OPT_CFG)&&(!i_reset)&&(i_cfg_stb)&&(!o_wb_stall)&&(!i_wb_we)
-		|=> (o_wb_ack)&&(o_qspi_cs_n==$past(o_qspi_cs_n))
-			&&(clk_ctr==0);
+		|=> (o_qspi_cs_n==$past(o_qspi_cs_n))
+			&&(clk_ctr==0)
+		##1 1'b1 [*(RDDELAY-1)]
+		##1 (o_wb_ack);
 	endproperty
 
 	// Non-config responses from the config port
 	property NOCFG_NOOP;
+		disable iff ((i_reset)||(!i_wb_cyc))
 		(!OPT_CFG)&&(!i_reset)&&(i_cfg_stb)&&(!o_wb_stall)
-		|=> (o_wb_ack)&&(o_qspi_cs_n==$past(o_qspi_cs_n))&&(clk_ctr==0);
+		|=> (o_qspi_cs_n==$past(o_qspi_cs_n))&&(clk_ctr==0)
+		##1 1'b1 [*(RDDELAY-1)]
+		##1 (o_wb_ack);
 	endproperty
 
-	assert	property (@(posedge i_clk) SPI_CFG_WRITE);
-	assert	property (@(posedge i_clk) QSPI_CFG_READ);
-	assert	property (@(posedge i_clk) QSPI_CFG_WRITE);
-	assert	property (@(posedge i_clk) CFG_RELEASE);
-	assert	property (@(posedge i_clk) CFG_READBUS_NOOP);
-	assert	property (@(posedge i_clk) NOCFG_NOOP);
+	// assert	property (@(posedge i_clk) SPI_CFG_WRITE);
+	// assert	property (@(posedge i_clk) QSPI_CFG_READ);
+	// assert	property (@(posedge i_clk) QSPI_CFG_WRITE);
+	// assert	property (@(posedge i_clk) CFG_RELEASE);
+	// assert	property (@(posedge i_clk) CFG_READBUS_NOOP);
+	// assert	property (@(posedge i_clk) NOCFG_NOOP);
+`else // VERIFIC
 
-`endif
+	// Lowspeed config write
+	reg	[CKDELAY+8:0]	f_cfglswrite;
+	wire	[8:0]		fw_cfglswrite;
+
+	initial	f_cfglswrite = 0;
+	always @(posedge i_clk)
+	if (i_reset)
+		f_cfglswrite <= 0;
+	else begin
+		f_cfglswrite <= { f_cfglswrite[CKDELAY+6:0], 1'b0 };
+		f_cfglswrite[0] <= (cfg_ls_write);
+	end
+
+	always @(*)
+	if (|f_cfglswrite[7:0])
+		assert(o_qspi_sck);
+	else if (|f_cfglswrite)
+		assert(!o_qspi_sck);
+
+	assign	fw_cfglswrite = f_cfglswrite[CKDELAY+8:CKDELAY];
+
+	always @(posedge i_clk)
+	if (fw_cfglswrite[8])
+	begin
+		if (RDDELAY == 0)
+		begin
+			assert((o_wb_ack)||(!$past(pre_ack))||(!$past(i_wb_cyc)));
+			assert(o_wb_data[7] == $past(i_qspi_dat[1],8));
+			assert(o_wb_data[6] == $past(i_qspi_dat[1],7));
+			assert(o_wb_data[5] == $past(i_qspi_dat[1],6));
+			assert(o_wb_data[4] == $past(i_qspi_dat[1],5));
+			assert(o_wb_data[3] == $past(i_qspi_dat[1],4));
+			assert(o_wb_data[2] == $past(i_qspi_dat[1],3));
+			assert(o_wb_data[1] == $past(i_qspi_dat[1],2));
+			assert(o_wb_data[0] == $past(i_qspi_dat[1],1));
+			assert(o_qspi_mod == NORMAL_SPI);
+		end
+	end else if (|fw_cfglswrite)
+	begin
+		assert(!dly_ack);
+		assert(!o_qspi_cs_n);
+		assert(o_qspi_mod == NORMAL_SPI);
+		if (fw_cfglswrite[0])
+			assert(o_qspi_dat[0] == $past(i_wb_data[7],CKDELAY+1));
+		if (fw_cfglswrite[1])
+			assert(o_qspi_dat[0] == $past(i_wb_data[6],CKDELAY+2));
+		if (fw_cfglswrite[2])
+			assert(o_qspi_dat[0] == $past(i_wb_data[5],CKDELAY+3));
+		if (fw_cfglswrite[3])
+			assert(o_qspi_dat[0] == $past(i_wb_data[4],CKDELAY+4));
+		if (fw_cfglswrite[4])
+			assert(o_qspi_dat[0] == $past(i_wb_data[3],CKDELAY+5));
+		if (fw_cfglswrite[5])
+			assert(o_qspi_dat[0] == $past(i_wb_data[2],CKDELAY+6));
+		if (fw_cfglswrite[6])
+			assert(o_qspi_dat[0] == $past(i_wb_data[1],CKDELAY+7));
+		if (fw_cfglswrite[7])
+			assert(o_qspi_dat[0] == $past(i_wb_data[0],CKDELAY+8));
+	end
+
+
+	//
+	//
+	// High speed config write
+	reg	[CKDELAY+2:0]	f_cfghswrite;
+	wire	[2:0]		fw_cfghswrite;
+
+	initial	f_cfghswrite = 0;
+	always @(posedge i_clk)
+	if (i_reset)
+		f_cfghswrite <= 0;
+	else begin
+		f_cfghswrite <= { f_cfghswrite[CKDELAY+1:0], 1'b0 };
+		f_cfghswrite[0] <= (cfg_hs_write);
+	end
+
+	always @(*)
+	if (|f_cfghswrite[1:0])
+		assert(o_qspi_sck);
+	else if (|f_cfghswrite)
+		assert(!o_qspi_sck);
+
+	assign	fw_cfghswrite = f_cfghswrite[CKDELAY+2:CKDELAY];
+
+	always @(posedge i_clk)
+	if (fw_cfghswrite[2])
+	begin
+		if (RDDELAY == 0)
+		begin
+			assert((o_wb_ack)||(!$past(pre_ack))||(!$past(i_wb_cyc)));
+			assert(o_qspi_mod == QUAD_WRITE);
+			assert(!o_wb_stall);
+		end
+	end else if (|fw_cfghswrite)
+	begin
+		if (fw_cfghswrite[0])
+			assert(o_qspi_dat == $past(i_wb_data[7:4],CKDELAY+1));
+		if (fw_cfghswrite[1])
+			assert(o_qspi_dat == $past(i_wb_data[3:0],CKDELAY+2));
+		assert(!dly_ack);
+		assert(!o_qspi_cs_n);
+		assert(o_qspi_mod == QUAD_WRITE);
+		assert(o_wb_stall);
+	end
+
+
+	// High speed config read
+	reg	[CKDELAY+2:0]	f_cfghsread;
+	wire	[2:0]		fw_cfghsread;
+
+	initial	f_cfghsread = 0;
+	always @(posedge i_clk)
+	if (i_reset)
+		f_cfghsread <= 0;
+	else begin
+		f_cfghsread <= { f_cfghsread[CKDELAY+1:0], 1'b0 };
+		f_cfghsread[0] <= (cfg_hs_read);
+	end
+
+	always @(*)
+	if (|f_cfghsread[1:0])
+		assert(o_qspi_sck);
+	else if (|f_cfghsread)
+		assert(!o_qspi_sck);
+
+	assign	fw_cfghsread = f_cfghsread[CKDELAY+2:CKDELAY];
+
+	always @(*)
+	if ((!maintenance)&&(o_qspi_cs_n))
+		assert(!actual_sck);
+
+	always @(posedge i_clk)
+	if (fw_cfghsread[2])
+	begin
+		if (RDDELAY == 0)
+		begin
+			assert((o_wb_ack)||(!$past(pre_ack))||(!$past(i_wb_cyc)));
+			assert(o_wb_data[7:4] == $past(i_qspi_dat[3:0],2));
+			assert(o_wb_data[3:0] == $past(i_qspi_dat[3:0],1));
+			assert(o_qspi_mod == QUAD_READ);
+			assert(!o_wb_stall);
+		end
+	end else if (|fw_cfghsread)
+	begin
+		assert(!dly_ack);
+		assert(!o_qspi_cs_n);
+		assert(o_qspi_mod == QUAD_READ);
+		assert(o_wb_stall);
+	end
+
+`endif // VERIFIC
 	////////////////////////////////////////////////////////////////////////
 	//
 	// Cover Properties

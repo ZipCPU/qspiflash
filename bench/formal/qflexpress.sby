@@ -1,12 +1,15 @@
 [tasks]
-prf
-cvr
+prf_0 prf ckzero
+cvr_0 cvr ckzero
+prf_1 prf ckone
+cvr_1 cvr ckone
+prf_2 prf cktwo
 
 [options]
-prf: mode prove
-prf: depth 36
+prf: mode bmc
+prf: depth 34
 cvr: mode cover
-cvr: depth 60
+cvr: depth 40
 
 [engines]
 smtbmc boolector
@@ -14,7 +17,11 @@ smtbmc boolector
 [script]
 read -formal -DQFLEXPRESS fwb_slave.v
 read -formal -DQFLEXPRESS qflexpress.v
-cvr: chparam -set OPT_STARTUP 0 qflexpress
+prf:  chparam -set OPT_STARTUP 0 qflexpress
+cvr:  chparam -set OPT_STARTUP 0 qflexpress
+ckzero: chparam -set CKDELAY 0 qflexpress
+ckone:  chparam -set CKDELAY 1 qflexpress
+
 prep -top qflexpress
 
 [files]

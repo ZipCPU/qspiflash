@@ -1,12 +1,3 @@
-dualflexpress_cvr
-dualflexpress_prf
-qflexpress_cvr
-qflexpress_prf
-spixpress_safety
-spixpress_safety_pipe
-spixpress_safety_nocfg
-spixpress_safety_pipe_nocfg
-spixpress_cover
-spixpress_cover_pipe
-spixpress_verific
-
+spixpress_*
+dualflexpress_*
+qflexpress_*

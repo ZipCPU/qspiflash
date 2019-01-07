@@ -1,29 +1,39 @@
 [*]
 [*] GTKWave Analyzer v3.3.66 (w)1999-2015 BSI
-[*] Wed Nov 21 22:54:20 2018
+[*] Mon Jan  7 17:36:42 2019
 [*]
-[dumpfile] "/home/dan/work/rnd/opencores/qspiflash/trunk/trace_induct.vcd"
-[dumpfile_mtime] "Wed Nov 21 21:36:13 2018"
-[dumpfile_size] 26513
+[dumpfile] "/home/dan/work/rnd/opencores/qspiflash/gamma/qflexpress_prf/engine_0/trace_induct.vcd"
+[dumpfile_mtime] "Mon Jan  7 17:35:40 2019"
+[dumpfile_size] 37894
 [savefile] "/home/dan/work/rnd/opencores/qspiflash/trunk/bench/formal/qflexpress.gtkw"
-[timestart] 83
-[size] 1662 600
+[timestart] 0
+[size] 1662 920
 [pos] -1 -1
-*-4.771864 240 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1
+*-6.771864 320 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1
+[treeopen] qflexpress.
 [sst_width] 196
 [signals_width] 174
 [sst_expanded] 1
-[sst_vpaned_height] 155
+[sst_vpaned_height] 268
 @28
 qflexpress.f_past_valid
 qflexpress.i_reset
 qflexpress.i_clk
+@200
+-
+@28
+[color] 3
 qflexpress.i_wb_cyc
+[color] 3
 qflexpress.i_wb_stb
+[color] 3
 qflexpress.i_cfg_stb
+[color] 3
 qflexpress.i_wb_we
 @22
+[color] 3
 qflexpress.i_wb_addr[21:0]
+[color] 3
 qflexpress.i_wb_data[31:0]
 @28
 qflexpress.o_wb_ack
@@ -34,13 +44,18 @@ qflexpress.o_wb_data[31:0]
 -
 @28
 qflexpress.pre_ack
+[color] 3
 qflexpress.o_qspi_cs_n
+[color] 3
 qflexpress.o_qspi_sck
 @22
+[color] 3
 qflexpress.o_qspi_dat[3:0]
 @28
+[color] 3
 qflexpress.o_qspi_mod[1:0]
 @22
+[color] 3
 qflexpress.i_qspi_dat[3:0]
 qflexpress.clk_ctr[4:0]
 @28
@@ -56,34 +71,28 @@ qflexpress.cfg_cs
 qflexpress.cfg_dir
 qflexpress.cfg_hs_read
 qflexpress.cfg_hs_write
+@29
 qflexpress.cfg_ls_write
+@28
 qflexpress.cfg_mode
 qflexpress.cfg_speed
 qflexpress.cfg_write
 @200
 -
 @22
-qflexpress.data_pipe[35:0]
-@29
-qflexpress.f_nacks[1:0]
-@28
-qflexpress.f_nreqs[1:0]
-qflexpress.f_outstanding[1:0]
-@22
 qflexpress.fv_addr[21:0]
-qflexpress.fv_data[7:0]
 @28
+[color] 3
 qflexpress.m_clk
-@22
-qflexpress.m_counter[14:0]
-@28
+[color] 3
 qflexpress.m_cs_n
 @22
+[color] 3
 qflexpress.m_dat[3:0]
-qflexpress.m_data[40:0]
 @28
+[color] 3
 qflexpress.m_mod[1:0]
-qflexpress.m_state[1:0]
+[color] 3
 qflexpress.maintenance
 qflexpress.pipe_req
 [pattern_trace] 1

@@ -4,9 +4,11 @@ cvr_0 cvr ckzero
 prf_1 prf ckone
 cvr_1 cvr ckone
 prf_2 prf cktwo
+xilinx prf ckzero
+ice40  prf ckone
 
 [options]
-prf: mode bmc
+prf: mode prove
 prf: depth 34
 cvr: mode cover
 cvr: depth 40
@@ -17,10 +19,12 @@ smtbmc boolector
 [script]
 read -formal -DQFLEXPRESS fwb_slave.v
 read -formal -DQFLEXPRESS qflexpress.v
-prf:  chparam -set OPT_STARTUP 0 qflexpress
+prf:  chparam -set OPT_STARTUP 1 qflexpress
 cvr:  chparam -set OPT_STARTUP 0 qflexpress
 ckzero: chparam -set CKDELAY 0 qflexpress
 ckone:  chparam -set CKDELAY 1 qflexpress
+xilinx: chparam -set RDDELAY 3 qflexpress
+ice40:  chparam -set RDDELAY 0 qflexpress
 
 prep -top qflexpress
 

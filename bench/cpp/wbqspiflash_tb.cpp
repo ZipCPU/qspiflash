@@ -14,7 +14,7 @@
 //
 ////////////////////////////////////////////////////////////////////////////////
 //
-// Copyright (C) 2015-2016,2018, Gisselquist Technology, LLC
+// Copyright (C) 2015-2016,2018-2019, Gisselquist Technology, LLC
 //
 // This file is part of the set of Wishbone controlled SPI flash controllers
 // project
@@ -48,6 +48,12 @@
 
 #define	QSPIFLASH	0x0400000
 #define	PARENT	WBFLASH_TB<Vwbqspiflash>
+
+#ifdef	NEW_VERILATOR
+#define	VVAR(A)	wbqspiflash__DOT_ ## A
+#else
+#define	VVAR(A)	v__DOT_ ## A
+#endif
 
 class	QSPIFLASH_TB : public PARENT {
 	FLASHSIM	*m_flash;
@@ -92,18 +98,18 @@ public:
 				(m_core->o_wb_data));
 			printf(" QSPI:%x:%x/%02x/%02x/%2d",
 				m_core->i_qspi_dat, m_core->o_qspi_mod,
-				m_core->v__DOT__state,
-				m_core->v__DOT__lldriver__DOT__state,
-				m_core->v__DOT__lldriver__DOT__spi_len);
-			printf(" %08x/%08x", m_core->v__DOT__spi_in,
-				m_core->v__DOT__lldriver__DOT__r_input);
+				m_core->VVAR(_state),
+				m_core->VVAR(_lldriver__DOT__state),
+				m_core->VVAR(_lldriver__DOT__spi_len));
+			printf(" %08x/%08x", m_core->VVAR(_spi_in),
+				m_core->VVAR(_lldriver__DOT__r_input));
 			printf(" %d,%d,%d/%d,%08x%c", 
-				m_core->v__DOT__spi_busy,
-				m_core->v__DOT__spi_valid,
-				m_core->v__DOT__spi_wr,
-				m_core->v__DOT__spi_len,
-				m_core->v__DOT__spi_out,
-				(m_core->v__DOT__write_in_progress)?'W':' ');
+				m_core->VVAR(_spi_busy),
+				m_core->VVAR(_spi_valid),
+				m_core->VVAR(_spi_wr),
+				m_core->VVAR(_spi_len),
+				m_core->VVAR(_spi_out),
+				(m_core->VVAR(_write_in_progress))?'W':' ');
 	
 			printf("\n");
 		}

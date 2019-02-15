@@ -1,17 +1,19 @@
 [tasks]
-prf_0 prf ckzero
-cvr_0 cvr ckzero
-prf_1 prf ckone
-cvr_1 cvr ckone
-prf_2 prf cktwo
-xilinx prf ckzero
-ice40  prf ckone
+xilinx  prf optpipe optcfg optstartup
+xilinxc cvr optpipe optcfg
+ice40   prf optpipe optcfg optstartup
+ice40c  cvr optpipe optcfg
+ice40div    prf optpipe optcfg divone
+ice40divc   cvr optpipe optcfg divone
+xilinxdiv   xilinx prf optpipe optcfg divone
+xilinxdivc  xilinx cvr optpipe optcfg divone
 
 [options]
 prf: mode prove
 prf: depth 34
 cvr: mode cover
 cvr: depth 40
+divone: depth 85
 
 [engines]
 smtbmc boolector
@@ -19,12 +21,17 @@ smtbmc boolector
 [script]
 read -formal -DQFLEXPRESS fwb_slave.v
 read -formal -DQFLEXPRESS qflexpress.v
-prf:  chparam -set OPT_STARTUP 1 qflexpress
-cvr:  chparam -set OPT_STARTUP 0 qflexpress
-ckzero: chparam -set CKDELAY 0 qflexpress
-ckone:  chparam -set CKDELAY 1 qflexpress
-xilinx: chparam -set RDDELAY 3 qflexpress
-ice40:  chparam -set RDDELAY 0 qflexpress
+xilinx:      chparam -set RDDELAY     3 qflexpress
+ice40:       chparam -set RDDELAY     0 qflexpress
+optpipe:     chparam -set OPT_PIPE    1 qflexpress
+~optpipe:    chparam -set OPT_PIPE    0 qflexpress
+optcfg:      chparam -set OPT_CFG     1 qflexpress
+~optcfg:     chparam -set OPT_CFG     0 qflexpress
+optstartup:  chparam -set OPT_STARTUP 1 qflexpress
+~optstartup: chparam -set OPT_STARTUP 0 qflexpress
+
+divone:      chparam -set OPT_STARTUP 0 qflexpress
+divone:      chparam -set OPT_CLKDIV  1 qflexpress
 
 prep -top qflexpress
 

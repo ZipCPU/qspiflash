@@ -60,6 +60,7 @@
 	wire		w_qspi_sck, w_qspi_cs_n;
 	wire	[1:0]	qspi_bmod;
 	wire	[3:0]	qspi_dat;
+	wire	[3:0]	i_qspi_dat, i_qspi_pedge, i_qspi_nedge;
 @TOP.MAIN=
 		// Quad SPI flash
 		w_qspi_cs_n, w_qspi_sck, qspi_dat, io_qspi_dat, qspi_bmod
@@ -73,28 +74,55 @@
 	//	0?	Normal serial mode, one bit in one bit out
 	//	10	Quad SPI mode, going out
 	//	11	Quad SPI mode coming from the device (read mode)
+`ifdef	XILINX
+	xoddr   xqspi_sck( s_clk, { 1'b1, !w_qspi_sck }, o_qspi_sck);
+	xoddr   xqspi_csn( s_clk, { w_qspi_cs_n, w_qspi_cs_n },o_qspi_cs_n);
+	//
+	xioddr  xqspi_d0(  s_clk, (qspi_bmod != 2'b11), { (2){qspi_dat[0]}},
+		{ i_qspi_pedge[0], i_qspi_nedge[0] }, io_qspi_dat[0]);
+	xioddr  xqspi_d1(  s_clk, (qspi_bmod == 2'b10), { (2){qspi_dat[1]}},
+		{ i_qspi_pedge[1], i_qspi_nedge[1] }, io_qspi_dat[1]);
+	xioddr  xqspi_d2(  s_clk, (qspi_bmod != 2'b11),
+		qspi_bmod[1] ? { (2){qspi_dat[2]}} : 2'b11,
+		{ i_qspi_pedge[2], i_qspi_nedge[2] }, io_qspi_dat[2]);
+	xioddr  xqspi_d3(  s_clk, (qspi_bmod != 2'b11),
+		qspi_bmod[1] ? { (2){qspi_dat[3]}} : 2'b11,
+		{ i_qspi_pedge[3], i_qspi_nedge[3] }, io_qspi_dat[3]);
+
+	assign	i_qspi_dat = i_qspi_pedge;
+##
+##
+@XDC.INSERT=
+set_property SLEW FAST [get_ports o_qspi_cs_n]
+set_property SLEW FAST [get_ports o_qspi_sck]
+set_property SLEW FAST [get_ports io_qspi_dat[0]]
+set_property SLEW FAST [get_ports io_qspi_dat[1]]
+set_property SLEW FAST [get_ports io_qspi_dat[2]]
+set_property SLEW FAST [get_ports io_qspi_dat[3]]
+##
+##
+##
+
+`else
 	assign io_qspi_dat = (!qspi_bmod[1])?({2'b11,1'bz,qspi_dat[0]})
 				:((qspi_bmod[0])?(4'bzzzz):(qspi_dat[3:0]));
 	assign	o_qspi_cs_n = w_qspi_cs_n;
-
-`ifdef	XILINX
-	reg	r_qspi_sck;
-	always @(posedge clk_s)
-		r_qspi_sck <= qspi_sck;
-	xddrck	xqspi_sck({clk_s, clk_sn}, r_qspi_sck, o_qspi_sck);
-`endif
+`endif // XILINX
 
 @MAIN.PORTLIST=
-		// The QSPI Flash
+		// The Universal QSPI Flash
 		o_qspi_cs_n, o_qspi_sck, o_qspi_dat, i_qspi_dat, o_qspi_mod
 @MAIN.IODECL=
-	// The QSPI flash
+	// The Universal QSPI flash
 	output	wire		o_qspi_cs_n, o_qspi_sck;
 	output	wire	[3:0]	o_qspi_dat;
 	input	wire	[3:0]	i_qspi_dat;
 	output	wire	[1:0]	o_qspi_mod;
 @MAIN.INSERT=
-	qflexpress #(@$LGFLASHSZ
+	qflexpress #(.LGFLASHSZ(@$LGFLASHSZ)
+`ifdef	XILINX
+		, .CKDELAY(0), .RDDELAY(3)
+`endif
 `ifdef	FLASHCFG_ACCESS
 		, .OPT_CFG(1'b1)
 `else
@@ -136,30 +164,11 @@
 #endif // @$(ACCESS)
 @SIM.TICK +=
 #ifdef	@$(ACCESS)
-		{ static int lastsck = 0; int iqspi;
-
-			if (lastsck)
-				(*m_@$(MEM.NAME))(m_core->o_qspi_cs_n,
-					0, m_core->o_qspi_dat);
-
-			iqspi = (*m_@$(MEM.NAME))(m_core->o_qspi_cs_n,
-				1, m_core->o_qspi_dat);
-
-
-			if (m_core->o_qspi_mod&2) {
-				if (m_core->o_qspi_mod&1)
-					;
-				else
-					iqspi = m_core->o_qspi_dat;
-			} else {
-				iqspi &= 0x002;
-				iqspi |= m_core->o_qspi_dat&1;
-				iqspi |= 0x0c;
-			}
-
-			m_core->i_qspi_dat = iqspi;
-			lastsck = m_core->o_qspi_sck;
-		}
+		m_core->i_qspi_dat = m_@$(MEM.NAME)->simtick(
+			m_core->o_qspi_cs_n,
+			m_core->o_qspi_sck,
+			m_core->o_qspi_dat,
+			m_core->o_qspi_mod);
 #endif // @$(ACCESS)
 @SIM.LOAD +=
 #ifdef	@$(ACCESS)
@@ -186,8 +195,8 @@
 	assign	@$(PREFIX)_stall = 1'b0;
 	assign	@$(PREFIX)_data  = 0;
 @REGS.NOTE= // FLASH erase/program configuration registers
-@REGS.N=1
-@REGS.0= 0 R_FLASHCFG FLASHCFG QSPIC
+@REGS.N= 1
+@REGS.0= 0 R_@$(DEVID) @$(DEVID) QSPIC
 @REGDEFS.H.INSERT=
 // Flash control constants
 #define	QSPI_FLASH	// This core and hardware support a Quad SPI flash

@@ -12,7 +12,7 @@
 ##
 ################################################################################
 ##
-## Copyright (C) 2017-2018, Gisselquist Technology, LLC
+## Copyright (C) 2017-2019, Gisselquist Technology, LLC
 ##
 ## This file is part of the set of Wishbone controlled SPI flash controllers
 ## project
@@ -39,7 +39,7 @@
 ################################################################################
 ##
 ##
-TESTS := spi dspi qspi
+TESTS := spi dspi qspi qflexpress
 .PHONY: $(TESTS)
 all: $(TESTS)
 RTL := ../../rtl
@@ -56,13 +56,10 @@ BMCARGS := --presat $(SOLVER) --unroll
 INDARGS := $(SOLVER) -i
 
 LLQSPI := llqspi
-XPRESS := qflashxpress
+QSPI := qflexpress
 
 $(LLQSPI).smt2: $(RTL)/$(LLQSPI).v $(LLQSPI).ys
 	$(YOSYS) -ql $(LLQSPI).yslog -s $(LLQSPI).ys
-
-$(XPRESS).smt2: $(RTL)/$(XPRESS).v $(XPRESS).ys
-	$(YOSYS) -ql $(XPRESS).yslog -s $(XPRESS).ys
 
 $(LLQSPI) : $(LLQSPI).check
 $(LLQSPI).check: $(LLQSPI).smt2
@@ -72,7 +69,28 @@ $(LLQSPI).check: $(LLQSPI).smt2
 	$(SMTBMC)    $(INDARGS) -t 86 --dump-vcd $(LLQSPI).vcd $(LLQSPI).smt2
 	touch $(LLQSPI).check
 
-$(XPRESS) : $(XPRESS).check
+.PHONY: $(QSPI)
+$(QSPI) : $(QSPI)_ice40/PASS     $(QSPI)_ice40c/PASS
+$(QSPI) : $(QSPI)_xilinx/PASS    $(QSPI)_xilinxc/PASS
+$(QSPI) : $(QSPI)_ice40div/PASS  $(QSPI)_ice40divc/PASS
+$(QSPI) : $(QSPI)_xilinxdiv/PASS $(QSPI)_xilinxdivc/PASS
+$(QSPI)_ice40/PASS:      $(QSPI).sby $(RTL)/$(QSPI).v
+	sby -f $(QSPI).sby ice40
+$(QSPI)_ice40c/PASS:     $(QSPI).sby $(RTL)/$(QSPI).v
+	sby -f $(QSPI).sby ice40c
+$(QSPI)_xilinx/PASS:     $(QSPI).sby $(RTL)/$(QSPI).v
+	sby -f $(QSPI).sby xilinx
+$(QSPI)_xilinxc/PASS:    $(QSPI).sby $(RTL)/$(QSPI).v
+	sby -f $(QSPI).sby xilinxc
+$(QSPI)_ice40div/PASS:  $(QSPI).sby $(RTL)/$(QSPI).v
+	sby -f $(QSPI).sby ice40div
+$(QSPI)_ice40divc/PASS: $(QSPI).sby $(RTL)/$(QSPI).v
+	sby -f $(QSPI).sby ice40divc
+$(QSPI)_xilinxdiv/PASS:  $(QSPI).sby $(RTL)/$(QSPI).v
+	sby -f $(QSPI).sby xilinxdiv
+$(QSPI)_xilinxdivc/PASS: $(QSPI).sby $(RTL)/$(QSPI).v
+	sby -f $(QSPI).sby xilinxdivc
+
 $(XPRESS).check: $(XPRESS).smt2
 	@rm -f $(XPRESS).check
 	$(SMTBMC)    $(BMCARGS) -t 88 --dump-vcd $(XPRESS).vcd $(XPRESS).smt2

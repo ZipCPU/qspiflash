@@ -13,7 +13,7 @@
 ##
 ################################################################################
 ##
-## Copyright (C) 2015-2018, Gisselquist Technology, LLC
+## Copyright (C) 2015-2019, Gisselquist Technology, LLC
 ##
 ## This file is part of the set of Wishbone controlled SPI flash controllers
 ## project
@@ -46,6 +46,7 @@ OBJDIR  := obj-pc
 RTLD	:= ../../rtl
 VERILATOR_ROOT   ?= $(shell bash -c 'verilator -V|grep VERILATOR_ROOT | head -1 | sed -e " s/^.*=\s*//"')
 VROOT   := $(VERILATOR_ROOT)
+VDEFS   := $(shell ./vversion.sh)
 VINCD   := $(VROOT)/include
 INCS	:= -I$(RTLD)/obj_dir/ -I$(RTLD) -I$(VINCD) -I$(VINCD)/vltstd
 SIMSRCS :=  flashsim.cpp byteswap.cpp
@@ -66,7 +67,7 @@ all:	spixpress_tb dualflexpress_tb qflexpress_tb wbqspiflash_tb pretest
 
 $(OBJDIR)/%.o: %.cpp
 	$(mk-objdir)
-	$(CXX) $(CFLAGS) $(INCS) -c $< -o $@
+	$(CXX) $(CFLAGS) $(VDEFS) $(INCS) -c $< -o $@
 
 $(OBJDIR)/%.o: $(VINCD)/%.cpp
 	$(mk-objdir)

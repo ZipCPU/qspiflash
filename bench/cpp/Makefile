@@ -54,7 +54,9 @@ LEGACYSRC := wbqspiflash_tb.cpp $(SIMSRCS)
 SPISRC  := spixpress_tb.cpp     $(SIMSRCS)
 DSPISRC := dualflexpress_tb.cpp $(SIMSRCS)
 QSPISRC := qflexpress_tb.cpp    $(SIMSRCS)
-SOURCES := $(wildcard *_tb.cpp) flashsim.cpp
+SOURCES := flashsim.cpp byteswap.cpp dualflexpress_tb.cpp flashsim.cpp \
+	qflexpress_tb.cpp qspiflashsim.cpp qspiflash_tb.cpp spixpress_tb.cpp \
+	wbqspiflash_tb.cpp
 VOBJDR	:= $(RTLD)/obj_dir
 RAWVLIB	:= verilated.cpp verilated_vcd_c.cpp
 VSRCS	:= $(addprefix $(VROOT)/include/,$(RAWVLIB))

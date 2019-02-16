@@ -249,13 +249,22 @@ module	qflexpress(i_clk, i_reset,
 
 	generate if (OPT_STARTUP)
 	begin : GEN_STARTUP
+		localparam	M_WAITBIT=10;
+		localparam	M_LGADDR=5;
+`ifdef	FORMAL
+		// For formal, jump into the middle of the startup
+		localparam	M_FIRSTIDX=9;
+`else
+		localparam	M_FIRSTIDX=0;
+`endif
+		reg	[M_WAITBIT:0]	m_this_word;
+		reg	[M_WAITBIT:0]	m_cmd_word	[0:(1<<M_LGADDR)-1];
+		reg	[M_LGADDR-1:0]	m_cmd_index;
 
-		reg	[6:0]	m_this_word;
-		reg	[6:0]	m_cmd_word	[0:127];
-		reg	[6:0]	m_cmd_index;
-
-		reg	[5:0]	m_counter;
-		reg		m_midcount;
+		reg	[M_WAITBIT-1:0]	m_counter;
+		reg			m_midcount;
+		reg	[2:0]		m_bitcount;
+		reg	[6:0]		m_byte;
 
 		// Let's script our startup with a series of commands.
 		// These commands are specific to the Micron Serial NOR flash
@@ -280,18 +289,20 @@ module	qflexpress(i_clk, i_reset,
 		//			an XIP mode that we can then use for
 		//			all reads following.
 		//
+		//	8'bit data	To be sent 1-bit at a time in NORMAL_SPI
+		//			mode, or 4-bits at a time in QUAD_WRITE
+		//			mode.  Ignored otherwis
 		//
 		integer k;
 		initial begin
-		for(k=0; k<128; k=k+1)
-			m_cmd_word[k] = 7'h7f;
+		for(k=0; k<(1<<M_LGADDR); k=k+1)
+			m_cmd_word[k] = -1;
 		// cmd_word= m_ctr_flag, m_mod[1:0],
 		//			m_cs_n, m_clk, m_data[3:0]
 		// Start off idle
 		//	This is really redundant since all of our commands are
 		//	idle's.
-		m_cmd_word[7'h35] = { 1'b1, 6'h3f };
-		m_cmd_word[7'h36] = { 1'b1, 6'h3f };
+		m_cmd_word[5'h0a] = -1;
 		//
 		// Since we don't know what mode we started in, whether the
 		// device was left in XIP mode or some other mode, we'll start
@@ -305,95 +316,43 @@ module	qflexpress(i_clk, i_reset,
 		// is initially in XIP or not.
 		//
 		// Exit any QSPI mode we might've been in
-		m_cmd_word[7'h37] = { 1'b0, NORMAL_SPI, 4'hf }; // Addr 1
-		m_cmd_word[7'h38] = { 1'b0, NORMAL_SPI, 4'hf }; // Addr 2
-		m_cmd_word[7'h39] = { 1'b0, NORMAL_SPI, 4'hf }; // Addr 3
-		m_cmd_word[7'h3a] = { 1'b0, NORMAL_SPI, 4'hf }; // Mode byte
-		m_cmd_word[7'h3b] = { 1'b0, NORMAL_SPI, 4'hf };
-		m_cmd_word[7'h3c] = { 1'b0, NORMAL_SPI, 4'hf };
-		m_cmd_word[7'h3d] = { 1'b0, NORMAL_SPI, 4'hf };
-		m_cmd_word[7'h3e] = { 1'b0, NORMAL_SPI, 4'hf };
-		m_cmd_word[7'h3f] = { 1'b0, NORMAL_SPI, 4'hf };
-		m_cmd_word[7'h40] = { 1'b0, NORMAL_SPI, 4'hf };
-		m_cmd_word[7'h41] = { 1'b0, NORMAL_SPI, 4'hf };
-		m_cmd_word[7'h42] = { 1'b0, NORMAL_SPI, 4'hf };
-		m_cmd_word[7'h43] = { 1'b0, NORMAL_SPI, 4'hf };
-		m_cmd_word[7'h44] = { 1'b0, NORMAL_SPI, 4'hf };
-		m_cmd_word[7'h45] = { 1'b0, NORMAL_SPI, 4'hf };
-		m_cmd_word[7'h46] = { 1'b0, NORMAL_SPI, 4'hf };
+		m_cmd_word[5'h0b] = { 1'b0, NORMAL_SPI, 8'hff }; // Addr 1
+		m_cmd_word[5'h0c] = { 1'b0, NORMAL_SPI, 8'hff }; // Addr 2
 		// Idle
-		m_cmd_word[7'h47] = { 1'b1, 6'h3f };
+		m_cmd_word[5'h0d] = { 1'b1, 6'h3f };
 		// Write enhanced configuration register
 		// The write enable must come first: 06
-		m_cmd_word[7'h48] = { 1'b0, NORMAL_SPI, 4'h0 };
-		m_cmd_word[7'h49] = { 1'b0, NORMAL_SPI, 4'h0 };
-		m_cmd_word[7'h4a] = { 1'b0, NORMAL_SPI, 4'h0 };
-		m_cmd_word[7'h4b] = { 1'b0, NORMAL_SPI, 4'h0 };
-		m_cmd_word[7'h4c] = { 1'b0, NORMAL_SPI, 4'h0 };
-		m_cmd_word[7'h4d] = { 1'b0, NORMAL_SPI, 4'h1 };
-		m_cmd_word[7'h4e] = { 1'b0, NORMAL_SPI, 4'h1 };
-		m_cmd_word[7'h4f] = { 1'b0, NORMAL_SPI, 4'h0 };
+		m_cmd_word[5'h0e] = { 1'b0, NORMAL_SPI, 8'h06 };
 		// Idle
-		m_cmd_word[7'h50] = { 1'b1, 6'h3f };
+		m_cmd_word[5'h0f] = -1;
 		// Write enhanced configuration register, 0x81, 0xfb
-		m_cmd_word[7'h51] = { 1'b0, NORMAL_SPI, 4'h1 };	// 0x81
-		m_cmd_word[7'h52] = { 1'b0, NORMAL_SPI, 4'h0 };
-		m_cmd_word[7'h53] = { 1'b0, NORMAL_SPI, 4'h0 };
-		m_cmd_word[7'h54] = { 1'b0, NORMAL_SPI, 4'h0 };
-		m_cmd_word[7'h55] = { 1'b0, NORMAL_SPI, 4'h0 };
-		m_cmd_word[7'h56] = { 1'b0, NORMAL_SPI, 4'h0 };
-		m_cmd_word[7'h57] = { 1'b0, NORMAL_SPI, 4'h0 };
-		m_cmd_word[7'h58] = { 1'b0, NORMAL_SPI, 4'h1 };
+		m_cmd_word[5'h10] = { 1'b0, NORMAL_SPI, 8'h81};	// 0x81
 		//
-		m_cmd_word[7'h59] = { 1'b0, NORMAL_SPI, 4'h1 };
-		m_cmd_word[7'h5a] = { 1'b0, NORMAL_SPI, 4'h1 };
-		m_cmd_word[7'h5b] = { 1'b0, NORMAL_SPI, 4'h1 };
-		m_cmd_word[7'h5c] = { 1'b0, NORMAL_SPI, 4'h1 };
-		m_cmd_word[7'h5d] = { 1'b0, NORMAL_SPI, 4'h0 };
-		m_cmd_word[7'h5e] = { 1'b0, NORMAL_SPI, 4'h0 };
-		m_cmd_word[7'h5f] = { 1'b0, NORMAL_SPI, 4'h1 };
-		m_cmd_word[7'h60] = { 1'b0, NORMAL_SPI, 4'h1 };
+		m_cmd_word[5'h11] = { 1'b0, NORMAL_SPI, 8'hf3 };
 		// Idle
-		m_cmd_word[7'h61] = { 1'b1, 6'h3f };
+		m_cmd_word[5'h12] = { 1'b1, 6'h3f };
 		// Enter into QSPI mode, 0xeb, 0,0,0
 		// 0xeb
-		m_cmd_word[7'h62] = { 1'b0, NORMAL_SPI, 4'h1 };
-		m_cmd_word[7'h63] = { 1'b0, NORMAL_SPI, 4'h1 };
-		m_cmd_word[7'h64] = { 1'b0, NORMAL_SPI, 4'h1 };
-		m_cmd_word[7'h65] = { 1'b0, NORMAL_SPI, 4'h0 };
-		m_cmd_word[7'h66] = { 1'b0, NORMAL_SPI, 4'h1 };
-		m_cmd_word[7'h67] = { 1'b0, NORMAL_SPI, 4'h0 };
-		m_cmd_word[7'h68] = { 1'b0, NORMAL_SPI, 4'h1 };
-		m_cmd_word[7'h69] = { 1'b0, NORMAL_SPI, 4'h1 };
+		m_cmd_word[5'h13] = { 1'b0, NORMAL_SPI, 8'heb };
 		// Addr #1
-		m_cmd_word[7'h6a] = { 1'b0, QUAD_WRITE, 4'h0 };
-		m_cmd_word[7'h6b] = { 1'b0, QUAD_WRITE, 4'h0 };
+		m_cmd_word[5'h14] = { 1'b0, QUAD_WRITE, 8'h00 };
 		// Addr #2
-		m_cmd_word[7'h6c] = { 1'b0, QUAD_WRITE, 4'h0 };
-		m_cmd_word[7'h6d] = { 1'b0, QUAD_WRITE, 4'h0 };
+		m_cmd_word[5'h15] = { 1'b0, QUAD_WRITE, 8'h00 };
 		// Addr #3
-		m_cmd_word[7'h6e] = { 1'b0, QUAD_WRITE, 4'h0 };
-		m_cmd_word[7'h6f] = { 1'b0, QUAD_WRITE, 4'h0 };
+		m_cmd_word[5'h16] = { 1'b0, QUAD_WRITE, 8'h00 };
 		// Mode byte
-		m_cmd_word[7'h70] = { 1'b0, QUAD_WRITE, 4'ha };
-		m_cmd_word[7'h71] = { 1'b0, QUAD_WRITE, 4'h0 };
+		m_cmd_word[5'h17] = { 1'b0, QUAD_WRITE, 8'ha0 };
 		// Dummy clocks, x10 for this flash
-		m_cmd_word[7'h72] = { 1'b0, QUAD_WRITE, 4'h0 };
-		m_cmd_word[7'h73] = { 1'b0, QUAD_WRITE, 4'h0 };
-		m_cmd_word[7'h74] = { 1'b0, QUAD_WRITE, 4'h0 };
-		m_cmd_word[7'h75] = { 1'b0, QUAD_WRITE, 4'h0 };
-		m_cmd_word[7'h76] = { 1'b0, QUAD_WRITE, 4'h0 };
-		m_cmd_word[7'h77] = { 1'b0, QUAD_WRITE, 4'h0 };
-		m_cmd_word[7'h78] = { 1'b0, QUAD_WRITE, 4'h0 };
-		m_cmd_word[7'h79] = { 1'b0, QUAD_WRITE, 4'h0 };
-		m_cmd_word[7'h7a] = { 1'b0, QUAD_WRITE, 4'h0 };
-		m_cmd_word[7'h7b] = { 1'b0, QUAD_WRITE, 4'h0 };
+		m_cmd_word[5'h18] = { 1'b0, QUAD_WRITE, 8'h00 };
+		m_cmd_word[5'h19] = { 1'b0, QUAD_WRITE, 8'h00 };
+		m_cmd_word[5'h1a] = { 1'b0, QUAD_WRITE, 8'h00 };
+		m_cmd_word[5'h1b] = { 1'b0, QUAD_WRITE, 8'h00 };
+		m_cmd_word[5'h1c] = { 1'b0, QUAD_WRITE, 8'h00 };
 		// Now read a byte for form
-		m_cmd_word[7'h7c] = { 1'b0, QUAD_READ, 4'h0 };
-		m_cmd_word[7'h7d] = { 1'b0, QUAD_READ, 4'h0 };
+		m_cmd_word[5'h1d] = { 1'b0, QUAD_READ, 8'h00 };
 		// Idle
-		m_cmd_word[7'h7e] = { 1'b1, 6'h3f };
-		m_cmd_word[7'h7f] = { 1'b1, 6'h3f };
+		m_cmd_word[5'h1e] = -1;
+		m_cmd_word[5'h1f] = -1;
 		// Then we are in business!
 		end
 
@@ -404,13 +363,13 @@ module	qflexpress(i_clk, i_reset,
 
 		//
 		initial	maintenance = 1'b1;
-
+		initial	m_cmd_index = 0;
 		always @(posedge i_clk)
 		if (i_reset)
 		begin
-			m_cmd_index <= 0;
+			m_cmd_index <= M_FIRSTIDX;
 			maintenance <= 1'b1;
-		end else if (m_ce)
+		end else if (m_ce && m_bitcount == 0)
 		begin
 			maintenance <= (maintenance)&&(!m_final);
 			m_cmd_index <= m_cmd_index + 1'b1;
@@ -418,28 +377,42 @@ module	qflexpress(i_clk, i_reset,
 
 		initial	m_this_word = -1;
 		always @(posedge i_clk)
-		if (m_ce)
+		if (m_ce && m_bitcount == 0)
 			m_this_word <= m_cmd_word[m_cmd_index];
 
 		initial	m_final = 1'b0;
 		always @(posedge i_clk)
 		if (i_reset)
 			m_final <= 1'b0;
-		else if (m_ce)
+		else if (m_ce && m_bitcount == 0)
 			m_final <= (&m_cmd_index);
 
+		//
+		// m_midcount .. are we in the middle of a counter/pause?
+		//
 		initial	m_midcount = 1;
 		initial	m_counter   = -1;
 		always @(posedge i_clk)
 		if (i_reset)
 		begin
 			m_midcount <= 1'b1;
+`ifdef	FORMAL
+			m_counter <= 3;
+`else
 			m_counter <= -1;
-		end else if (m_ce)
+`endif
+		end else if (m_ce && m_bitcount == 0)
 		begin
-			m_midcount <= m_this_word[6] && (|m_this_word[5:0]);
-			if (m_this_word[6])
-				m_counter <= m_this_word[5:0];
+			m_midcount <= m_this_word[M_WAITBIT]
+					&& (|m_this_word[M_WAITBIT-1:0]);
+			if (m_this_word[M_WAITBIT])
+			begin
+				m_counter <= m_this_word[M_WAITBIT-1:0];
+`ifdef	FORMAL
+				if (m_this_word[M_WAITBIT-1:0] > 3);
+					m_counter <= 3;
+`endif
+			end
 		end else begin
 			m_midcount <= (m_counter > 1);
 			if (m_counter > 0)
@@ -453,55 +426,154 @@ module	qflexpress(i_clk, i_reset,
 		begin
 			m_cs_n <= 1'b1;
 			m_mod  <= NORMAL_SPI;
-			m_dat  <= 4'h0;
+			m_bitcount <= 0;
 		end else if (ckstb)
 		begin
-			if ((m_ce)&&(m_final))
+			if (m_bitcount != 0)
+				m_bitcount <= m_bitcount - 1;
+			else if ((m_ce)&&(m_final))
 			begin
 				m_cs_n <= 1'b1;
 				m_mod  <= NORMAL_SPI;
-				m_dat  <= 4'h0;
-				assert(m_cs_n);
-			end else if ((m_midcount)||(m_this_word[6]))
+				m_bitcount <= 0;
+			end else if ((m_midcount)||(m_this_word[M_WAITBIT]))
 			begin
 				m_cs_n <= 1'b1;
 				m_mod  <= NORMAL_SPI;
-				m_dat  <= 4'h0;
+				m_bitcount <= 0;
 			end else begin
 				m_cs_n <= 1'b0;
-				m_mod  <= m_this_word[5:4];
-				m_dat  <= m_this_word[3:0];
+				m_mod  <= m_this_word[M_WAITBIT-1:M_WAITBIT-2];
+				m_bitcount <= 3'h1;
+				if (!m_this_word[M_WAITBIT-1])
+					m_bitcount <= m_bitcount - 1;//i.e.7
 			end
 		end
 
-		always @(*)
-			m_clk = !m_cs_n;
+		always @(posedge i_clk)
+		if (ckstb)
+		begin
+			if (m_bitcount == 0)
+			begin
+				m_dat <= m_this_word[7:4];
+				m_byte <= { m_this_word[3:0],m_this_word[2:0]};
+				if (!m_this_word[M_WAITBIT-1])
+				begin
+					// Slow speed
+					m_dat[0]  <= m_this_word[7];
+					m_byte <= m_this_word[6:0];
+				end
+			end else begin
+				m_dat <= m_byte[6:3];
+				m_byte <= { m_byte[5:0], m_this_word[0] };
+				if (!m_mod[1])
+					// Slow speed
+					m_dat[0] <= m_byte[6];
+			end
+		end
+
+		if (OPT_ODDR)
+		begin
+			always @(*)
+				m_clk = !m_cs_n;
+		end else begin
+
+			always @(posedge i_clk)
+			if (i_reset)
+				m_clk <= 1'b1;
+			else if ((!m_clk)&&(ckpos))
+				m_clk <= 1'b1;
+			else if ((m_midcount)||(m_this_word[M_WAITBIT]))
+				m_clk <= 1'b1;
+			else if (ckneg)
+				m_clk <= 1'b0;
+		end
+
 `ifdef	FORMAL
-		(* anyconst *) reg [6:0]	f_const_addr;
+		(* anyconst *) reg [M_LGADDR:0]	f_const_addr;
 
 		always @(*)
-			assert((m_cmd_word[f_const_addr][6])
-				||(m_cmd_word[f_const_addr][5:4] != 2'b01));
+		begin
+			assert((m_cmd_word[f_const_addr][M_WAITBIT])
+				||(m_cmd_word[f_const_addr][M_WAITBIT-1:M_WAITBIT-2] != 2'b01));
+			if (m_cmd_word[f_const_addr][M_WAITBIT])
+				assert(m_cmd_word[f_const_addr][M_WAITBIT-3:0] > 0);
+		end
 		always @(*)
-		if (m_cmd_index != f_const_addr)
-			assume((m_cmd_word[m_cmd_index][6])||(m_cmd_word[m_cmd_index][5:4] != 2'b01));
-		always @(*)
-			assert((m_this_word[6])||(m_this_word[5:4] != 2'b01));
+		begin
+			if (m_cmd_index != f_const_addr)
+				assume((m_cmd_word[m_cmd_index][M_WAITBIT])||(m_cmd_word[m_cmd_index][M_WAITBIT-1:M_WAITBIT-2] != 2'b01));
+			if (m_cmd_word[m_cmd_index][M_WAITBIT])
+				assume(m_cmd_word[m_cmd_index][M_WAITBIT-3:0]>0);
+		end
 
 		always @(*)
-			assert(m_cmd_word[7'h7e] == { 1'b1, 6'h3f });
-		always @(*)
-			assert(m_cmd_word[7'h7f] == { 1'b1, 6'h3f });
+		begin
+			assert((m_this_word[M_WAITBIT])
+				||(m_this_word[M_WAITBIT-1:M_WAITBIT-2] != 2'b01));
+			if (m_this_word[M_WAITBIT])
+				assert(m_this_word[M_WAITBIT-3:0] > 0);
+		end
 
-		wire	[6:0]	last_index;
+		always @(*)
+			assert(m_cmd_word[5'h1e] == 11'h7ff);
+		always @(*)
+			assert(m_cmd_word[5'h1f] == 11'h7ff);
+
+		wire	[M_LGADDR-1:0]	last_index;
 		assign	last_index = m_cmd_index - 1;
 
 		always @(posedge i_clk)
-		if ((f_past_valid)&&(m_cmd_index != 0))
+		if ((f_past_valid)&&(m_cmd_index != M_FIRSTIDX))
 			assert(m_this_word == m_cmd_word[last_index]);
 
 		always @(posedge i_clk)
 			assert(m_midcount == (m_counter != 0));
+
+		reg	[20:0]	f_mpipe;
+		initial	f_mpipe = 0;
+		always @(posedge i_clk)
+		if (i_reset)
+			f_mpipe <= 0;
+		else
+			f_mpipe <= { f_mpipe[19:0], (m_cmd_index == 5'h15) };
+
+		always @(posedge i_clk)
+		begin
+			cover(!maintenance);
+			cover(f_mpipe[3]);
+			cover(f_mpipe[4]);
+			cover(f_mpipe[5]);
+			cover(f_mpipe[6]);
+			cover(f_mpipe[7]);
+			cover(f_mpipe[8]);
+			cover(f_mpipe[9]);
+			cover(f_mpipe[10]);
+			cover(f_mpipe[11]);
+			cover(m_cmd_index == 5'h0a);
+			cover(m_cmd_index == 5'h0b);
+			cover(m_cmd_index == 5'h0c);
+			cover(m_cmd_index == 5'h0d);
+			cover(m_cmd_index == 5'h0e);
+			cover(m_cmd_index == 5'h0f);
+			cover(m_cmd_index == 5'h10);
+			cover(m_cmd_index == 5'h11);
+			cover(m_cmd_index == 5'h12);
+			cover(m_cmd_index == 5'h13);
+			cover(m_cmd_index == 5'h14);
+			cover(m_cmd_index == 5'h15);
+			cover(m_cmd_index == 5'h16);	// @ 470
+			cover(m_cmd_index == 5'h17);	// @482
+			cover(m_cmd_index == 5'h18);	// @ 494
+			cover(m_cmd_index == 5'h19);	// @ 506
+			cover(m_cmd_index == 5'h1a);	// @ 518
+			cover(m_cmd_index == 5'h1b);	// @ 530
+			cover(m_cmd_index == 5'h1c);	// @ 542
+			cover(m_cmd_index == 5'h1d);	// @ 554
+			cover(m_cmd_index == 5'h1e);	// @ 572
+			cover(m_cmd_index == 5'h1f);	// @ 590
+					// 602
+		end
 `endif
 	end else begin : NO_STARTUP_OPT
 
@@ -758,7 +830,7 @@ module	qflexpress(i_clk, i_reset,
 		if (RDDELAY > 1)
 			sck_pipe <= { sck_pipe[RDDELAY-2:0], actual_sck };
 		else
-			sck_pipe <= actuak_sck;
+			sck_pipe <= actual_sck;
 
 		initial	ack_pipe = 0;
 		always @(posedge i_clk)
@@ -882,6 +954,18 @@ module	qflexpress(i_clk, i_reset,
 	// verilator lint_on  UNUSED
 
 `ifdef	FORMAL
+	localparam	F_MEMDONE   = NDUMMY+6+8+(OPT_ODDR ? 0:1);
+	localparam	F_MEMACK    = F_MEMDONE + RDDELAY;
+	localparam	F_PIPEDONE  = 8;
+	localparam	F_PIPEACK   = F_PIPEDONE + RDDELAY;
+	localparam	F_CFGLSDONE = 8+(OPT_ODDR ? 0:1);
+	localparam	F_CFGLSACK  = F_CFGLSDONE + RDDELAY;
+	localparam	F_CFGHSDONE = 2+(OPT_ODDR ? 0:1);
+	localparam	F_CFGHSACK  = RDDELAY+F_CFGHSDONE;
+	localparam	F_ACKCOUNT = (15+NDUMMY+RDDELAY)
+				*(OPT_ODDR ? 1 : (OPT_CLKDIV+1));
+	genvar	k;
+
 	wire	[(F_LGDEPTH-1):0]	f_nreqs, f_nacks,
 					f_outstanding;
 	reg	[(AW-1):0]	f_req_addr;
@@ -927,11 +1011,9 @@ module	qflexpress(i_clk, i_reset,
 			&&($past(i_cfg_stb))&&($past(o_wb_stall)))
 		`ASSUME(i_cfg_stb);
 
-	localparam	F_ACKCOUNT = (15+NDUMMY+RDDELAY)
-				*(OPT_ODDR ? 1 : (OPT_CLKDIV+1));
 	fwb_slave #(.AW(AW), .DW(DW),.F_LGDEPTH(F_LGDEPTH),
-			.F_MAX_STALL(F_ACKCOUNT+1),
-			.F_MAX_ACK_DELAY(F_ACKCOUNT),
+			.F_MAX_STALL((OPT_CLKDIV<3) ? (F_ACKCOUNT+1):0),
+			.F_MAX_ACK_DELAY((OPT_CLKDIV<3) ? F_ACKCOUNT : 0),
 			.F_OPT_RMW_BUS_OPTION(0),
 			.F_OPT_CLK2FFLOGIC(1'b0),
 			.F_OPT_DISCONTINUOUS(1))
@@ -1137,11 +1219,6 @@ module	qflexpress(i_clk, i_reset,
 	//
 	//
 	//
-	always @(posedge i_clk)
-		cover((f_past_valid)&&(o_wb_ack));
-
-	// always @(posedge i_clk) cover((dly_ack)&&(f_second_ack));
-
 	reg	[21:0]	fv_addr;
 	always @(posedge i_clk)
 	if (bus_request)
@@ -1153,9 +1230,6 @@ module	qflexpress(i_clk, i_reset,
 		fv_data <= i_wb_data;
 
 	// Memory reads
-	localparam	F_MEMDONE = NDUMMY+6+8+(OPT_ODDR ? 0:1);
-	localparam	F_MEMACK  = F_MEMDONE + RDDELAY;
-	// For RDDELAY == 0, NDUMMY = 10, 6 address clocks, 8 data clocks
 	reg	[F_MEMACK:0] f_memread;
 
 	initial	f_memread = 0;
@@ -1192,8 +1266,6 @@ module	qflexpress(i_clk, i_reset,
 	always @(posedge i_clk)
 	if ((OPT_ODDR)&&(|f_memread[F_MEMDONE-1:0]))
 		assert(o_qspi_sck);
-	else if ((!OPT_ODDR)&&(|f_memread[F_MEMDONE-1:1]))
-		assert(o_qspi_sck == ckstb);
 
 	always @(posedge i_clk)
 	if (|f_memread[6+(OPT_ODDR ? 0:1):0])
@@ -1269,37 +1341,16 @@ module	qflexpress(i_clk, i_reset,
 	always @(posedge i_clk)
 	if (f_memread[F_MEMDONE])
 		assert((clk_ctr == 0)||((OPT_PIPE)&&(clk_ctr == 8)));
-	else if (f_memread[F_MEMDONE-1])
-		assert(clk_ctr == 1);
-	else if (f_memread[F_MEMDONE-2])
-		assert(clk_ctr == 2);
-	else if (f_memread[F_MEMDONE-3])
-		assert(clk_ctr == 3);
-	else if (f_memread[F_MEMDONE-4])
-		assert(clk_ctr == 4);
-	else if (f_memread[F_MEMDONE-5])
-		assert(clk_ctr == 5);
-	else if (f_memread[F_MEMDONE-6])
-		assert(clk_ctr == 6);
-	else if (f_memread[F_MEMDONE-7])
-		assert(clk_ctr == 7);
-	else if (f_memread[F_MEMDONE-8])
-		assert(clk_ctr == 8);
-	else if (f_memread[F_MEMDONE-9])
-		assert(clk_ctr == 9);
-	else if (f_memread[F_MEMDONE-10])
-		assert(clk_ctr == 10);
-	else if (f_memread[F_MEMDONE-11])
-		assert(clk_ctr == 11);
-	else if (f_memread[F_MEMDONE-12])
-		assert(clk_ctr == 12);
-	else if (f_memread[F_MEMDONE-13])
-		assert(clk_ctr == 13);
-	else if (f_memread[F_MEMDONE-14])
-		assert(clk_ctr == 14);
+	else if (|f_memread[F_MEMDONE-1:0])
+		assert(f_memread[F_MEMDONE-clk_ctr]);
 
-	localparam	F_PIPEDONE = 8;
-	localparam	F_PIPEACK = F_PIPEDONE + RDDELAY;
+	generate for(k=0; k<F_MEMACK-1; k=k+1)
+	begin : ONEHOT_MEMREAD
+		always @(*)
+		if (f_memread[k])
+			assert((f_memread ^ (1<<k)) == 0);
+	end endgenerate
+
 	reg	[F_PIPEACK:0]	f_piperead;
 
 	generate if (RDDELAY == 0)
@@ -1359,29 +1410,13 @@ module	qflexpress(i_clk, i_reset,
 	always @(posedge i_clk)
 	if (f_piperead[F_PIPEDONE])
 		assert(clk_ctr == 0 || clk_ctr == 8);
-	else if (f_piperead[F_PIPEDONE-1])
-		assert(clk_ctr == 1);
-	else if (f_piperead[F_PIPEDONE-2])
-		assert(clk_ctr == 2);
-	else if (f_piperead[F_PIPEDONE-3])
-		assert(clk_ctr == 3);
-	else if (f_piperead[F_PIPEDONE-4])
-		assert(clk_ctr == 4);
-	else if (f_piperead[F_PIPEDONE-5])
-		assert(clk_ctr == 5);
-	else if (f_piperead[F_PIPEDONE-6])
-		assert(clk_ctr == 6);
-	else if (f_piperead[F_PIPEDONE-7])
-		assert(clk_ctr == 7);
-	else if (f_piperead[F_PIPEDONE-8])
-		assert(clk_ctr == 8);
+	else if (|f_piperead[F_PIPEDONE-1:0])
+		assert(f_piperead[F_PIPEDONE-clk_ctr]);
 
 	////////////////////////////////////////////////////////////////////////
 	//
 	// Lowspeed config write
 	//
-	localparam	F_CFGLSDONE = 8+(OPT_ODDR ? 0:1);
-	localparam	F_CFGLSACK  = F_CFGLSDONE + RDDELAY;
 	reg	[F_CFGLSACK:0]	f_cfglswrite;
 
 	initial	f_cfglswrite = 0;
@@ -1482,8 +1517,6 @@ module	qflexpress(i_clk, i_reset,
 	//
 	// High speed config write
 	//
-	localparam	F_CFGHSDONE = 2+(OPT_ODDR ? 0:1);
-	localparam	F_CFGHSACK  = RDDELAY+F_CFGHSDONE;
 	reg	[F_CFGHSACK:0]	f_cfghswrite;
 
 	generate if (RDDELAY == 0)
@@ -1674,6 +1707,8 @@ module	qflexpress(i_clk, i_reset,
 			assert(f_cfghswrite == 0);
 			assert(f_cfghsread  == 0);
 		end
+
+		assert(clk_ctr <= F_MEMDONE);
 	end
 
 	always @(*)
@@ -1684,6 +1719,15 @@ module	qflexpress(i_clk, i_reset,
 			||(|f_cfglswrite[F_CFGLSDONE:0])
 			||(|f_cfghswrite[F_CFGHSDONE:0])
 			||(|f_cfghsread[F_CFGHSDONE:0]));
+	end else if (!maintenance && cfg_mode)
+	begin
+		// assert(!o_qspi_cs_n);
+		if ((o_qspi_sck == OPT_ODDR)||(clk_ctr > 0))
+		begin
+			assert( (|f_cfglswrite[F_CFGLSDONE:0])
+				||(|f_cfghswrite[F_CFGHSDONE:0])
+				||(|f_cfghsread[F_CFGHSDONE:0]));
+		end
 	end
 
 	always @(posedge i_clk)
@@ -1700,13 +1744,15 @@ module	qflexpress(i_clk, i_reset,
 	begin
 		always @(posedge i_clk)
 		begin
-			cover(o_wb_ack && f_memread[   F_MEMACK]);	//!
+			cover(o_wb_ack && f_memread[ F_MEMACK]);
+			cover(o_wb_ack && f_piperead[F_MEMACK]);
 			//
-			cover(o_wb_ack && |f_memread);		
+			cover(o_wb_ack && |f_memread);
 			//
-			cover(|f_memread);		
+			cover(|f_memread);
 			//
-			cover(|f_memread[   F_MEMACK]);
+			cover(f_memread[   F_MEMACK]);
+
 		end
 
 		if (OPT_CFG)
@@ -1721,9 +1767,9 @@ module	qflexpress(i_clk, i_reset,
 			cover(|f_cfghsread);
 			cover(|f_cfghswrite);
 
-			cover(o_wb_ack && |f_cfglswrite);	//!
-			cover(o_wb_ack && |f_cfghsread);	//!
-			cover(o_wb_ack && |f_cfghswrite);	//!
+			cover(o_wb_ack && |f_cfglswrite);
+			cover(o_wb_ack && |f_cfghsread);
+			cover(o_wb_ack && |f_cfghswrite);
 
 			cover(f_cfglswrite[0]);
 			cover(f_cfghsread[ 0]);
@@ -1738,17 +1784,21 @@ module	qflexpress(i_clk, i_reset,
 			cover(f_cfghswrite[F_CFGHSACK-1]);
 
 			cover(f_cfglswrite[F_CFGLSACK]);
-			cover(f_cfghsread[ F_CFGHSACK]);	//!
-			cover(f_cfghswrite[F_CFGHSACK]);	//!
+			cover(f_cfghsread[ F_CFGHSACK]);
+			cover(f_cfghswrite[F_CFGHSACK]);
 
-			cover(o_wb_ack && f_cfglswrite[F_CFGLSACK]);	//!
-			cover(o_wb_ack && f_cfghsread[ F_CFGHSACK]);	//!
-			cover(o_wb_ack && f_cfghswrite[F_CFGHSACK]);	//!
+			cover(o_wb_ack && f_cfglswrite[F_CFGLSACK]);
+			cover(o_wb_ack && f_cfghsread[ F_CFGHSACK]);
+			cover(o_wb_ack && f_cfghswrite[F_CFGHSACK]);
 			end
 		end
+	end else begin
+
+		always @(posedge i_clk)
+			cover(!maintenance);
+
 	end endgenerate
 
-`endif // VERIFIC
 	////////////////////////////////////////////////////////////////////////
 	//
 	// Cover Properties

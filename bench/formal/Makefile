@@ -70,26 +70,51 @@ $(LLQSPI).check: $(LLQSPI).smt2
 	touch $(LLQSPI).check
 
 .PHONY: $(QSPI)
-$(QSPI) : $(QSPI)_ice40/PASS     $(QSPI)_ice40c/PASS
-$(QSPI) : $(QSPI)_xilinx/PASS    $(QSPI)_xilinxc/PASS
-$(QSPI) : $(QSPI)_ice40div/PASS  $(QSPI)_ice40divc/PASS
-$(QSPI) : $(QSPI)_xilinxdiv/PASS $(QSPI)_xilinxdivc/PASS
+$(QSPI) : $(QSPI)_bare/PASS      $(QSPI)_barep/PASS      $(QSPI)_barecfg/PASS
+$(QSPI) : $(QSPI)_cfgonly/PASS
+$(QSPI) : $(QSPI)_ice40/PASS     $(QSPI)_ice40c/PASS     $(QSPI)_ice40s/PASS
+$(QSPI) : $(QSPI)_xilinx/PASS    $(QSPI)_xilinxc/PASS    $(QSPI)_xilinxs/PASS
+$(QSPI) : $(QSPI)_ice40div/PASS  $(QSPI)_ice40divc/PASS  $(QSPI)_ice40divs/PASS
+$(QSPI) : $(QSPI)_xilinxdiv/PASS $(QSPI)_xilinxdivc/PASS $(QSPI)_xilinxdivs/PASS
+$(QSPI) : $(QSPI)_divthree/PASS  $(QSPI)_divfive/PASS    $(QSPI)_divfives/PASS
+$(QSPI)_bare/PASS:      $(QSPI).sby $(RTL)/$(QSPI).v
+	sby -f $(QSPI).sby bare
+$(QSPI)_barep/PASS:      $(QSPI).sby $(RTL)/$(QSPI).v
+	sby -f $(QSPI).sby barep
+$(QSPI)_barecfg/PASS:    $(QSPI).sby $(RTL)/$(QSPI).v
+	sby -f $(QSPI).sby barecfg
+$(QSPI)_cfgonly/PASS:    $(QSPI).sby $(RTL)/$(QSPI).v
+	sby -f $(QSPI).sby cfgonly
 $(QSPI)_ice40/PASS:      $(QSPI).sby $(RTL)/$(QSPI).v
 	sby -f $(QSPI).sby ice40
 $(QSPI)_ice40c/PASS:     $(QSPI).sby $(RTL)/$(QSPI).v
 	sby -f $(QSPI).sby ice40c
+$(QSPI)_ice40s/PASS:     $(QSPI).sby $(RTL)/$(QSPI).v
+	sby -f $(QSPI).sby ice40s
 $(QSPI)_xilinx/PASS:     $(QSPI).sby $(RTL)/$(QSPI).v
 	sby -f $(QSPI).sby xilinx
 $(QSPI)_xilinxc/PASS:    $(QSPI).sby $(RTL)/$(QSPI).v
 	sby -f $(QSPI).sby xilinxc
+$(QSPI)_xilinxs/PASS:    $(QSPI).sby $(RTL)/$(QSPI).v
+	sby -f $(QSPI).sby xilinxs
 $(QSPI)_ice40div/PASS:  $(QSPI).sby $(RTL)/$(QSPI).v
 	sby -f $(QSPI).sby ice40div
 $(QSPI)_ice40divc/PASS: $(QSPI).sby $(RTL)/$(QSPI).v
 	sby -f $(QSPI).sby ice40divc
+$(QSPI)_ice40divs/PASS: $(QSPI).sby $(RTL)/$(QSPI).v
+	sby -f $(QSPI).sby ice40divs
 $(QSPI)_xilinxdiv/PASS:  $(QSPI).sby $(RTL)/$(QSPI).v
 	sby -f $(QSPI).sby xilinxdiv
 $(QSPI)_xilinxdivc/PASS: $(QSPI).sby $(RTL)/$(QSPI).v
 	sby -f $(QSPI).sby xilinxdivc
+$(QSPI)_xilinxdivs/PASS: $(QSPI).sby $(RTL)/$(QSPI).v
+	sby -f $(QSPI).sby xilinxdivs
+$(QSPI)_divthree/PASS:   $(QSPI).sby $(RTL)/$(QSPI).v
+	sby -f $(QSPI).sby divthree
+$(QSPI)_divfive/PASS:    $(QSPI).sby $(RTL)/$(QSPI).v
+	sby -f $(QSPI).sby divfive
+$(QSPI)_divfives/PASS:   $(QSPI).sby $(RTL)/$(QSPI).v
+	sby -f $(QSPI).sby divfives
 
 $(XPRESS).check: $(XPRESS).smt2
 	@rm -f $(XPRESS).check

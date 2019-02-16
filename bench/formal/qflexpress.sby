@@ -1,19 +1,37 @@
 [tasks]
 xilinx  prf optpipe optcfg optstartup
 xilinxc cvr optpipe optcfg
+xilinxs cvr optpipe optcfg optstartup
+bare    prf
+barep   prf optpipe
+barecfg prf optpipe optcfg
+cfgonly prf optcfg
 ice40   prf optpipe optcfg optstartup
 ice40c  cvr optpipe optcfg
-ice40div    prf optpipe optcfg divone
+ice40s  cvr optpipe optcfg optstartup
+ice40div    prf optpipe optcfg divone optstartup
 ice40divc   cvr optpipe optcfg divone
+ice40divs   cvr optpipe optcfg divone optstartup
 xilinxdiv   xilinx prf optpipe optcfg divone
 xilinxdivc  xilinx cvr optpipe optcfg divone
+xilinxdivs  xilinx cvr optpipe optcfg divone optstartup
+divthree  prf optpipe optcfg
+divfive   prf optpipe optcfg
+divfives  cvr optpipe optcfg optstartup
 
 [options]
 prf: mode prove
 prf: depth 34
 cvr: mode cover
 cvr: depth 40
-divone: depth 85
+divone:     depth  60
+divthree:   depth 102
+divfive:    depth 155
+ice40s:     depth 150
+xilinxs:    depth 160
+ice40divs:  depth 250
+xilinxdivs: depth 250
+divfives:   depth 610
 
 [engines]
 smtbmc boolector
@@ -27,11 +45,14 @@ optpipe:     chparam -set OPT_PIPE    1 qflexpress
 ~optpipe:    chparam -set OPT_PIPE    0 qflexpress
 optcfg:      chparam -set OPT_CFG     1 qflexpress
 ~optcfg:     chparam -set OPT_CFG     0 qflexpress
+
+divone:      chparam -set OPT_CLKDIV  1 qflexpress
+divthree:    chparam -set OPT_CLKDIV  3 qflexpress
+divfive:     chparam -set OPT_CLKDIV  5 qflexpress
+divfives:    chparam -set OPT_CLKDIV  5 qflexpress
+
 optstartup:  chparam -set OPT_STARTUP 1 qflexpress
 ~optstartup: chparam -set OPT_STARTUP 0 qflexpress
-
-divone:      chparam -set OPT_STARTUP 0 qflexpress
-divone:      chparam -set OPT_CLKDIV  1 qflexpress
 
 prep -top qflexpress
 

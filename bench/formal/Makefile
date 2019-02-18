@@ -39,7 +39,7 @@
 ################################################################################
 ##
 ##
-TESTS := spi dspi qspi qflexpress
+TESTS := spi dspi qspi spixpress dualflexpress qflexpress
 .PHONY: $(TESTS)
 all: $(TESTS)
 RTL := ../../rtl
@@ -56,6 +56,8 @@ BMCARGS := --presat $(SOLVER) --unroll
 INDARGS := $(SOLVER) -i
 
 LLQSPI := llqspi
+SPIX := spixpress
+DSPI := dualflexpress
 QSPI := qflexpress
 
 $(LLQSPI).smt2: $(RTL)/$(LLQSPI).v $(LLQSPI).ys
@@ -68,6 +70,70 @@ $(LLQSPI).check: $(LLQSPI).smt2
 	$(SMTBMC) -g $(BMCARGS) -t 88 --dump-vcd $(LLQSPI).vcd $(LLQSPI).smt2
 	$(SMTBMC)    $(INDARGS) -t 86 --dump-vcd $(LLQSPI).vcd $(LLQSPI).smt2
 	touch $(LLQSPI).check
+
+.PHONY: $(SPIX)
+$(SPIX) : $(SPIX)_safety/PASS $(SPIX)_safety_pipe/PASS $(SPIX)_safety_nocfg/PASS
+$(SPIX) : $(SPIX)_safety_pipe_nocfg/PASS $(SPIX)_cover/PASS $(SPIX)_cover_pipe/PASS
+$(SPIX)_safety/PASS:       $(SPIX).sby $(RTL)/$(SPIX).v
+	sby -f $(SPIX).sby safety
+$(SPIX)_safety_pipe/PASS:  $(SPIX).sby $(RTL)/$(SPIX).v
+	sby -f $(SPIX).sby safety_pipe
+$(SPIX)_safety_nocfg/PASS: $(SPIX).sby $(RTL)/$(SPIX).v
+	sby -f $(SPIX).sby safety_nocfg
+$(SPIX)_safety_pipe_nocfg/PASS: $(SPIX).sby $(RTL)/$(SPIX).v
+	sby -f $(SPIX).sby safety_pipe_nocfg
+$(SPIX)_cover/PASS: $(SPIX).sby $(RTL)/$(SPIX).v
+	sby -f $(SPIX).sby cover
+$(SPIX)_cover_pipe/PASS: $(SPIX).sby $(RTL)/$(SPIX).v
+	sby -f $(SPIX).sby cover_pipe
+
+.PHONY: $(DSPI)
+$(DSPI) : $(DSPI)_bare/PASS      $(DSPI)_barep/PASS      $(DSPI)_barecfg/PASS
+$(DSPI) : $(DSPI)_cfgonly/PASS
+$(DSPI) : $(DSPI)_ice40/PASS     $(DSPI)_ice40c/PASS     $(DSPI)_ice40s/PASS
+$(DSPI) : $(DSPI)_xilinx/PASS    $(DSPI)_xilinxc/PASS    $(DSPI)_xilinxs/PASS
+$(DSPI) : $(DSPI)_ice40div/PASS  $(DSPI)_ice40divc/PASS # $(DSPI)_ice40divs/PASS
+$(DSPI) : $(DSPI)_xilinxdiv/PASS $(DSPI)_xilinxdivc/PASS #$(DSPI)_xilinxdivs/PASS
+$(DSPI) : $(DSPI)_divthree/PASS  $(DSPI)_divfive/PASS
+# $(DSPI)_divfives/PASS
+$(DSPI)_bare/PASS:      $(DSPI).sby $(RTL)/$(DSPI).v
+	sby -f $(DSPI).sby bare
+$(DSPI)_barep/PASS:      $(DSPI).sby $(RTL)/$(DSPI).v
+	sby -f $(DSPI).sby barep
+$(DSPI)_barecfg/PASS:    $(DSPI).sby $(RTL)/$(DSPI).v
+	sby -f $(DSPI).sby barecfg
+$(DSPI)_cfgonly/PASS:    $(DSPI).sby $(RTL)/$(DSPI).v
+	sby -f $(DSPI).sby cfgonly
+$(DSPI)_ice40/PASS:      $(DSPI).sby $(RTL)/$(DSPI).v
+	sby -f $(DSPI).sby ice40
+$(DSPI)_ice40c/PASS:     $(DSPI).sby $(RTL)/$(DSPI).v
+	sby -f $(DSPI).sby ice40c
+$(DSPI)_ice40s/PASS:     $(DSPI).sby $(RTL)/$(DSPI).v
+	sby -f $(DSPI).sby ice40s
+$(DSPI)_xilinx/PASS:     $(DSPI).sby $(RTL)/$(DSPI).v
+	sby -f $(DSPI).sby xilinx
+$(DSPI)_xilinxc/PASS:    $(DSPI).sby $(RTL)/$(DSPI).v
+	sby -f $(DSPI).sby xilinxc
+$(DSPI)_xilinxs/PASS:    $(DSPI).sby $(RTL)/$(DSPI).v
+	sby -f $(DSPI).sby xilinxs
+$(DSPI)_ice40div/PASS:  $(DSPI).sby $(RTL)/$(DSPI).v
+	sby -f $(DSPI).sby ice40div
+$(DSPI)_ice40divc/PASS: $(DSPI).sby $(RTL)/$(DSPI).v
+	sby -f $(DSPI).sby ice40divc
+$(DSPI)_ice40divs/PASS: $(DSPI).sby $(RTL)/$(DSPI).v
+	sby -f $(DSPI).sby ice40divs
+$(DSPI)_xilinxdiv/PASS:  $(DSPI).sby $(RTL)/$(DSPI).v
+	sby -f $(DSPI).sby xilinxdiv
+$(DSPI)_xilinxdivc/PASS: $(DSPI).sby $(RTL)/$(DSPI).v
+	sby -f $(DSPI).sby xilinxdivc
+$(DSPI)_xilinxdivs/PASS: $(DSPI).sby $(RTL)/$(DSPI).v
+	sby -f $(DSPI).sby xilinxdivs
+$(DSPI)_divthree/PASS:   $(DSPI).sby $(RTL)/$(DSPI).v
+	sby -f $(DSPI).sby divthree
+$(DSPI)_divfive/PASS:    $(DSPI).sby $(RTL)/$(DSPI).v
+	sby -f $(DSPI).sby divfive
+$(DSPI)_divfives/PASS:   $(DSPI).sby $(RTL)/$(DSPI).v
+	sby -f $(DSPI).sby divfives
 
 .PHONY: $(QSPI)
 $(QSPI) : $(QSPI)_bare/PASS      $(QSPI)_barep/PASS      $(QSPI)_barecfg/PASS
@@ -116,15 +182,8 @@ $(QSPI)_divfive/PASS:    $(QSPI).sby $(RTL)/$(QSPI).v
 $(QSPI)_divfives/PASS:   $(QSPI).sby $(RTL)/$(QSPI).v
 	sby -f $(QSPI).sby divfives
 
-$(XPRESS).check: $(XPRESS).smt2
-	@rm -f $(XPRESS).check
-	$(SMTBMC)    $(BMCARGS) -t 88 --dump-vcd $(XPRESS).vcd $(XPRESS).smt2
-	$(SMTBMC) -g $(BMCARGS) -t 88 --dump-vcd $(XPRESS).vcd $(XPRESS).smt2
-	$(SMTBMC)    $(INDARGS) -t 86 --dump-vcd $(XPRESS).vcd $(XPRESS).smt2
-	touch $(XPRESS).check
-
 
 .PHONY: clean
 clean:
 	rm $(LLQSPI).smt2 $(LLQSPI) *.vcd $(LLQSPI).yslog
-	rm $(XPRESS).smt2 $(XPRESS) *.vcd $(XPRESS).yslog
+	rm $(SPIX)_*/ $(DSPI)_*/ $(QSPI)_*/

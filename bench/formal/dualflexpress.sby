@@ -1,12 +1,37 @@
 [tasks]
-prf
-cvr
+xilinx  prf optpipe optcfg optstartup
+xilinxc cvr optpipe optcfg
+xilinxs cvr optpipe optcfg optstartup
+bare    prf
+barep   prf optpipe
+barecfg prf optpipe optcfg
+cfgonly prf optcfg
+ice40   prf optpipe optcfg optstartup
+ice40c  cvr optpipe optcfg
+ice40s  cvr optpipe optcfg optstartup
+ice40div    prf optpipe optcfg divone optstartup
+ice40divc   cvr optpipe optcfg divone
+# ice40divs   cvr optpipe optcfg divone optstartup
+xilinxdiv   xilinx prf optpipe optcfg divone
+xilinxdivc  xilinx cvr optpipe optcfg divone
+# xilinxdivs  xilinx cvr optpipe optcfg divone optstartup
+divthree  prf optpipe optcfg
+divfive   prf optpipe optcfg
+# divfives  cvr optpipe optcfg optstartup
 
 [options]
 prf: mode prove
-prf: depth 42
+prf: depth 40
 cvr: mode cover
-cvr: depth 60
+cvr: depth 145
+divone:     depth 120
+divthree:   depth 152
+divfive:    depth 230
+ice40s:     depth 120
+xilinxs:    depth 110
+# ice40divs:  depth 250
+# xilinxdivs: depth 250
+# divfives:   depth 610
 
 [engines]
 smtbmc boolector
@@ -14,7 +39,21 @@ smtbmc boolector
 [script]
 read -formal -DDUALFLEXPRESS fwb_slave.v
 read -formal -DDUALFLEXPRESS dualflexpress.v
-cvr: chparam -set OPT_STARTUP 0 dualflexpress
+xilinx:      chparam -set RDDELAY     3 dualflexpress
+ice40:       chparam -set RDDELAY     0 dualflexpress
+optpipe:     chparam -set OPT_PIPE    1 dualflexpress
+~optpipe:    chparam -set OPT_PIPE    0 dualflexpress
+optcfg:      chparam -set OPT_CFG     1 dualflexpress
+~optcfg:     chparam -set OPT_CFG     0 dualflexpress
+
+divone:      chparam -set OPT_CLKDIV  1 dualflexpress
+divthree:    chparam -set OPT_CLKDIV  3 dualflexpress
+divfive:     chparam -set OPT_CLKDIV  5 dualflexpress
+# divfives:    chparam -set OPT_CLKDIV  5 dualflexpress
+
+optstartup:  chparam -set OPT_STARTUP 1 dualflexpress
+~optstartup: chparam -set OPT_STARTUP 0 dualflexpress
+
 prep -top dualflexpress
 
 [files]

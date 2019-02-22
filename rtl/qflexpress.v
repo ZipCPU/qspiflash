@@ -117,11 +117,17 @@ module	qflexpress(i_clk, i_reset,
 	//
 	// RDDELAY is the number of clock cycles from when o_qspi_dat is valid
 	// until i_qspi_dat is valid.  Read delays from 0-4 have been verified
+	// DDR Registered I/O on a Xilinx device can be done with a RDDELAY=3
+	//	On Intel/Altera devices, RDDELAY=2 works
+	//	I'm using RDDELAY=0 for my iCE40 devices
+	//
 	parameter	RDDELAY = 0;
 	//
 	// NDUMMY is the number of "dummy" clock cycles between the 24-bits of
 	// the Quad I/O address and the first data bits.  This includes the
-	// two clocks of the Quad output mode byte, 0xa0
+	// two clocks of the Quad output mode byte, 0xa0.  The default is 10
+	// for a Micron device.  Windbond seems to want 2.  Note your flash
+	// device carefully when you choose this value.
 	// 
 	parameter	NDUMMY = 10;
 	//
@@ -164,6 +170,9 @@ module	qflexpress(i_clk, i_reset,
 	output	reg	[1:0]	o_qspi_mod;
 	output	wire	[3:0]	o_qspi_dat;
 	input	wire	[3:0]	i_qspi_dat;
+	// Debugging port
+	// output	wire		o_dbg_trigger;
+	// output	wire	[31:0]	o_debug;
 
 	reg		dly_ack, read_sck, xtra_stall;
 	// clk_ctr must have enough bits for ...
@@ -196,15 +205,42 @@ module	qflexpress(i_clk, i_reset,
 	assign	cfg_ls_write = (cfg_write)&&(!i_wb_data[QSPEED_BIT]);
 
 
-	wire	ckstb, ckpos, ckneg, ckpre;
+	reg	ckstb, ckpos, ckneg, ckpre;
 
 	generate if (OPT_ODDR)
 	begin
 
-		assign	ckstb = 1'b1;
-		assign	ckpos = 1'b1;
-		assign	ckneg = 1'b1;
-		assign	ckpre = 1'b1;
+		always @(*)
+		begin
+			ckstb = 1'b1;
+			ckpos = 1'b1;
+			ckneg = 1'b1;
+			ckpre = 1'b1;
+		end
+
+	end else if (OPT_CLKDIV == 1)
+	begin : CKSTB_ONE
+
+		reg	clk_counter;
+
+		initial	clk_counter = 1'b1;
+		always @(posedge i_clk)
+		if (i_reset)
+			clk_counter <= 1'b1;
+		else if (clk_counter != 0)
+			clk_counter <= 1'b0;
+		else if (bus_request)
+			clk_counter <= (pipe_req);
+		else if ((maintenance)||(!o_qspi_cs_n && o_wb_stall))
+			clk_counter <= 1'b1;
+
+		always @(*)
+		begin
+			ckpre = (clk_counter == 1);
+			ckstb = (clk_counter == 0);
+			ckpos = (clk_counter == 1);
+			ckneg = (clk_counter == 0);
+		end
 
 	end else begin : CKSTB_GEN
 
@@ -221,11 +257,24 @@ module	qflexpress(i_clk, i_reset,
 		else if ((maintenance)||(!o_qspi_cs_n && o_wb_stall))
 			clk_counter <= OPT_CLKDIV;
 
-		assign	ckpre = (clk_counter == 1);
-		assign	ckstb = (clk_counter == 0);
-		assign	ckpos = (clk_counter == (OPT_CLKDIV+1)/2);
-		assign	ckneg = (clk_counter == 0);
+		initial	ckpre = (OPT_CLKDIV == 1);
+		initial	ckstb = 1'b0;
+		initial	ckpos = (OPT_CLKDIV == 1);
+		always @(posedge i_clk)
+		if (i_reset)
+		begin
+			ckpre <= (OPT_CLKDIV == 1);
+			ckstb <= 1'b0;
+			ckpos <= (OPT_CLKDIV == 1);
+		end else // if (OPT_CLKDIV > 1)
+		begin
+			ckpre <= (clk_counter == 2);
+			ckstb <= (clk_counter == 1);
+			ckpos <= (clk_counter == (OPT_CLKDIV+1)/2+1);
+		end
 
+		always @(*)
+			ckneg = ckstb;
 `ifdef	FORMAL
 		always @(*)
 			assert(!ckpos || !ckneg);
@@ -319,7 +368,7 @@ module	qflexpress(i_clk, i_reset,
 		m_cmd_word[5'h0b] = { 1'b0, NORMAL_SPI, 8'hff }; // Addr 1
 		m_cmd_word[5'h0c] = { 1'b0, NORMAL_SPI, 8'hff }; // Addr 2
 		// Idle
-		m_cmd_word[5'h0d] = { 1'b1, 6'h3f };
+		m_cmd_word[5'h0d] = { 1'b1, 10'h3f };
 		// Write enhanced configuration register
 		// The write enable must come first: 06
 		m_cmd_word[5'h0e] = { 1'b0, NORMAL_SPI, 8'h06 };
@@ -467,8 +516,11 @@ module	qflexpress(i_clk, i_reset,
 				m_dat <= m_byte[6:3];
 				m_byte <= { m_byte[5:0], m_this_word[0] };
 				if (!m_mod[1])
+				begin
 					// Slow speed
 					m_dat[0] <= m_byte[6];
+					m_byte <= { m_byte[5:0], m_this_word[0] };
+				end
 			end
 		end
 
@@ -657,7 +709,7 @@ module	qflexpress(i_clk, i_reset,
 		if (!o_wb_stall)
 			next_addr <= i_wb_addr + 1'b1;
 
-		assign	w_pipe_condition = (i_wb_stb)&&(pre_ack)
+		assign	w_pipe_condition = (i_wb_stb)&&(!i_wb_we)&&(pre_ack)
 				&&(!maintenance)
 				&&(!cfg_mode)
 				&&(!o_qspi_cs_n)
@@ -797,8 +849,32 @@ module	qflexpress(i_clk, i_reset,
 	else
 		dly_ack <= 1'b0;
 
-	always @(*)
-		actual_sck = (o_qspi_sck)&&(ckneg)&&(OPT_ODDR || !o_qspi_cs_n);
+	generate if (OPT_ODDR)
+	begin : SCK_ACTUAL
+
+		always @(*)
+			actual_sck = o_qspi_sck;
+
+	end else if (OPT_CLKDIV == 1)
+	begin : SCK_ONE
+
+		initial	actual_sck = 1'b0;
+		always @(posedge i_clk)
+		if (i_reset)
+			actual_sck <= 1'b0;
+		else
+			actual_sck <= (!o_qspi_sck)&&(clk_ctr > 0);
+
+	end else begin : SCK_ANY
+
+		initial	actual_sck = 1'b0;
+		always @(posedge i_clk)
+		if (i_reset)
+			actual_sck <= 1'b0;
+		else
+			actual_sck <= (o_qspi_sck)&&(ckpre)&&(clk_ctr > 0);
+
+	end endgenerate
 
 
 `ifdef	FORMAL
@@ -827,7 +903,9 @@ module	qflexpress(i_clk, i_reset,
 
 		initial	sck_pipe = 0;
 		always @(posedge i_clk)
-		if (RDDELAY > 1)
+		if (i_reset)
+			sck_pipe <= 0;
+		else if (RDDELAY > 1)
 			sck_pipe <= { sck_pipe[RDDELAY-2:0], actual_sck };
 		else
 			sck_pipe <= actual_sck;
@@ -854,7 +932,7 @@ module	qflexpress(i_clk, i_reset,
 		initial	stall_pipe = -1;
 		always @(posedge i_clk)
 		if (i_reset)
-			stall_pipe = -1;
+			stall_pipe <= -1;
 		else if (RDDELAY > 1)
 			stall_pipe <= { stall_pipe[RDDELAY-2:0], not_done };
 		else
@@ -893,7 +971,7 @@ module	qflexpress(i_clk, i_reset,
 				o_wb_data <= { o_wb_data[27:0], i_qspi_dat };
 		end
 
-		if ((OPT_CFG)&&((cfg_mode)||((i_cfg_stb)&&(!o_wb_stall))))
+		if ((OPT_CFG)&&(cfg_mode))
 			o_wb_data[16:8] <= { 4'b0, cfg_mode, cfg_speed, 1'b0,
 				cfg_dir, cfg_cs };
 	end
@@ -933,6 +1011,7 @@ module	qflexpress(i_clk, i_reset,
 
 	/*
 	reg	r_last_cfg;
+
 	initial	r_last_cfg = 1'b0;
 	always @(posedge i_clk)
 		r_last_cfg <= cfg_mode;
@@ -1189,8 +1268,6 @@ module	qflexpress(i_clk, i_reset,
 				assert(o_qspi_mod == NORMAL_SPI);
 			else if ((cfg_dir)&&(clk_ctr > 0))
 				assert(o_qspi_mod == QUAD_WRITE);
-			// else
-			//	assert(o_qspi_mod == QUAD_READ);
 		end else if (clk_ctr > 5'd8)
 			assert(o_qspi_mod == QUAD_WRITE);
 		else if (clk_ctr > 0)
@@ -1222,7 +1299,12 @@ module	qflexpress(i_clk, i_reset,
 	reg	[21:0]	fv_addr;
 	always @(posedge i_clk)
 	if (bus_request)
-		fv_addr <= i_wb_addr;
+	begin
+		// Make sure all of the bits are set
+		fv_addr <= 0;
+		// Now set as many bits as we have address bits
+		fv_addr[AW-1:0] <= i_wb_addr;
+	end
 
 	reg	[31:0]	fv_data;
 	always @(posedge i_clk)
@@ -1340,7 +1422,7 @@ module	qflexpress(i_clk, i_reset,
 
 	always @(posedge i_clk)
 	if (f_memread[F_MEMDONE])
-		assert((clk_ctr == 0)||((OPT_PIPE)&&(clk_ctr == 8)));
+		assert((clk_ctr == 0)||((OPT_PIPE)&&(clk_ctr == F_PIPEDONE)));
 	else if (|f_memread[F_MEMDONE-1:0])
 		assert(f_memread[F_MEMDONE-clk_ctr]);
 
@@ -1409,10 +1491,22 @@ module	qflexpress(i_clk, i_reset,
 
 	always @(posedge i_clk)
 	if (f_piperead[F_PIPEDONE])
-		assert(clk_ctr == 0 || clk_ctr == 8);
+		assert(clk_ctr == 0 || clk_ctr == F_PIPEDONE);
 	else if (|f_piperead[F_PIPEDONE-1:0])
 		assert(f_piperead[F_PIPEDONE-clk_ctr]);
 
+	always @(*)
+	if (i_cfg_stb && !o_wb_stall)
+	begin
+		assert(|{ cfg_noop, cfg_hs_write, cfg_hs_read, cfg_ls_write });
+
+		if (cfg_noop)
+			assert({ cfg_hs_write, cfg_hs_read, cfg_ls_write }==0);
+		else if (cfg_hs_write)
+			assert({ cfg_hs_read, cfg_ls_write }==0);
+		else if (cfg_hs_read)
+			assert({ cfg_ls_write }==0);
+	end
 	////////////////////////////////////////////////////////////////////////
 	//
 	// Lowspeed config write
@@ -1458,7 +1552,7 @@ module	qflexpress(i_clk, i_reset,
 		end
 		if (f_cfglswrite[F_CFGLSDONE-6])
 		begin
-			assert(o_qspi_dat[0] == fv_data[5]); // ICE40
+			assert(o_qspi_dat[0] == fv_data[5]);
 			assert(clk_ctr == 6);
 		end
 		if (f_cfglswrite[F_CFGLSDONE-5])
@@ -1494,6 +1588,10 @@ module	qflexpress(i_clk, i_reset,
 		assert(!o_qspi_cs_n);
 		assert(o_qspi_mod == NORMAL_SPI);
 	end
+
+	always @(posedge i_clk)
+	if (|f_cfglswrite[F_CFGLSACK:F_CFGLSDONE])
+		assert(o_qspi_sck == !OPT_ODDR);
 
 	always @(posedge i_clk)
 	if ((OPT_ODDR)&&(f_cfglswrite[F_CFGLSACK]))
@@ -1645,6 +1743,10 @@ module	qflexpress(i_clk, i_reset,
 			assert(!o_qspi_sck);
 	end
 
+	always @(posedge i_clk)
+	if (|f_cfghsread[F_CFGHSACK:F_CFGHSDONE])
+		assert(o_qspi_sck == !OPT_ODDR);
+
 	always @(*)
 	if ((!maintenance)&&(o_qspi_cs_n))
 		assert(!actual_sck);
@@ -1657,6 +1759,15 @@ module	qflexpress(i_clk, i_reset,
 		assert(o_qspi_mod == QUAD_READ);
 		assert(o_wb_stall);
 	end
+
+	generate if (RDDELAY > 0)
+	begin
+
+		always @(posedge i_clk)
+		if (|f_cfghswrite[F_CFGHSACK:F_CFGHSDONE])
+			assert(!actual_sck);
+
+	end endgenerate
 
 
 	always @(posedge i_clk)
@@ -1681,6 +1792,32 @@ module	qflexpress(i_clk, i_reset,
 	//
 	// Crossover checks
 	//
+	wire	f_qspi_not_done, f_qspi_not_ackd, f_qspi_active, f_qspi_ack;
+	assign	f_qspi_not_done = 
+			(|f_memread[F_MEMDONE-1:0])
+			||(|f_piperead[F_PIPEDONE-1:0])
+			||(|f_cfglswrite[F_CFGLSDONE-1:0])
+			||(|f_cfghswrite[F_CFGHSDONE-1:0])
+			||(|f_cfghsread[F_CFGHSDONE-1:0]);
+	assign	f_qspi_active = (!maintenance)&&(
+			(|f_memread[F_MEMACK-1:0])
+			||(|f_piperead[F_PIPEACK-1:0])
+			||(|f_cfglswrite[F_CFGLSACK-1:0])
+			||(|f_cfghswrite[F_CFGHSACK-1:0])
+			||(|f_cfghsread[F_CFGHSACK-1:0]));
+	assign	f_qspi_not_ackd = (!maintenance)&&(!f_qspi_not_done)&&(
+			(|f_memread[F_MEMACK-1:0])
+			||(|f_piperead[F_PIPEACK-1:0])
+			||(|f_cfglswrite[F_CFGLSACK-1:0])
+			||(|f_cfghswrite[F_CFGHSACK-1:0])
+			||(|f_cfghsread[F_CFGHSACK-1:0]));
+	assign	f_qspi_ack = (!maintenance)&&
+			(|f_memread[F_MEMACK:0])
+			||(|f_piperead[F_PIPEACK:0])
+			||(|f_cfglswrite[F_CFGLSACK:0])
+			||(|f_cfghswrite[F_CFGHSACK:0])
+			||(|f_cfghsread[F_CFGHSACK:0]);
+
 	always @(*)
 	begin
 		if ((|f_memread[F_MEMDONE:0])||(|f_piperead[F_PIPEDONE:0]))
@@ -1711,22 +1848,43 @@ module	qflexpress(i_clk, i_reset,
 		assert(clk_ctr <= F_MEMDONE);
 	end
 
-	always @(*)
-	if (!maintenance && !o_qspi_cs_n && !cfg_mode)
+	always @(posedge i_clk)
+	if ((f_past_valid)&&(!f_qspi_ack)&&(!$past(i_reset))
+		&&(!$past(maintenance)))
 	begin
+		assert($stable(o_wb_data[7:0]));
+		if (!cfg_mode && !$past(cfg_mode)
+				&& !$past(i_cfg_stb && !o_wb_stall)
+				&&($past(f_past_valid))
+				&& !$past(i_cfg_stb && !o_wb_stall,2))
+			assert($stable(o_wb_data));
+	end
+
+	always @(*)
+	if (!maintenance && actual_sck)
+	begin
+		assert(f_qspi_not_done);
+		/*
 		assert((|f_memread[F_MEMDONE:0])
 			||(|f_piperead[F_PIPEDONE:0])
 			||(|f_cfglswrite[F_CFGLSDONE:0])
 			||(|f_cfghswrite[F_CFGHSDONE:0])
 			||(|f_cfghsread[F_CFGHSDONE:0]));
+			*/
+	end
+
+	always @(*)
+	if (!maintenance && !o_qspi_cs_n && !cfg_mode)
+	begin
+		assert((|f_memread[F_MEMDONE:0])
+			||(|f_piperead[F_PIPEDONE:0]));
 	end else if (!maintenance && cfg_mode)
 	begin
-		// assert(!o_qspi_cs_n);
-		if ((o_qspi_sck == OPT_ODDR)||(clk_ctr > 0))
+		if ((o_qspi_sck == OPT_ODDR)||(clk_ctr > 0)||(actual_sck))
 		begin
-			assert( (|f_cfglswrite[F_CFGLSDONE:0])
-				||(|f_cfghswrite[F_CFGHSDONE:0])
-				||(|f_cfghsread[F_CFGHSDONE:0]));
+			assert( (|f_cfglswrite[F_CFGLSDONE-1:0])
+				||(|f_cfghswrite[F_CFGHSDONE-1:0])
+				||(|f_cfghsread[F_CFGHSDONE-1:0]));
 		end
 	end
 
@@ -1740,20 +1898,26 @@ module	qflexpress(i_clk, i_reset,
 			|| f_cfghsread[F_CFGHSACK]);
 	end
 
+
+	////////////////////////////////////////////////////////////////////////
+	//
+	// Cover Properties
+	//
+	////////////////////////////////////////////////////////////////////////
+	//
+	// Due to the way the chip starts up, requiring 32k+ maintenance clocks,
+	// these cover statements are not likely to be hit
+
 	generate if (!OPT_STARTUP)
 	begin
+		// Why is this generate only if !OPT_STARTUP?  For performance
+		// reasons.  The startup sequence can take a great many clocks.
+		// cover() would never be able to work through all of those
+		// clocks to find the following examples, and so it would fail.
+		// By only checking these cover() statements if !OPT_STARTUP,
+		// we give them an opportunity to succeed
 		always @(posedge i_clk)
-		begin
 			cover(o_wb_ack && f_memread[ F_MEMACK]);
-			cover(o_wb_ack && f_piperead[F_MEMACK]);
-			//
-			cover(o_wb_ack && |f_memread);
-			//
-			cover(|f_memread);
-			//
-			cover(f_memread[   F_MEMACK]);
-
-		end
 
 		if (OPT_CFG)
 		begin
@@ -1792,24 +1956,15 @@ module	qflexpress(i_clk, i_reset,
 			cover(o_wb_ack && f_cfghswrite[F_CFGHSACK]);
 			end
 		end
-	end else begin
 
-		always @(posedge i_clk)
-			cover(!maintenance);
-
-	end endgenerate
-
-	////////////////////////////////////////////////////////////////////////
-	//
-	// Cover Properties
-	//
-	////////////////////////////////////////////////////////////////////////
-	//
-	// Due to the way the chip starts up, requiring 32k+ maintenance clocks,
-	// these cover statements are not likely to be hit
-
-	generate if (!OPT_STARTUP)
-	begin
+		if (OPT_PIPE)
+		begin
+			always @(posedge i_clk)
+				cover(o_wb_ack && f_piperead[F_PIPEACK]);
+		end
+		//
+		//
+		//
 		always @(posedge i_clk)
 			cover((o_wb_ack)&&(!cfg_mode));
 		always @(posedge i_clk)
@@ -1823,6 +1978,11 @@ module	qflexpress(i_clk, i_reset,
 			cover((o_wb_ack)&&(cfg_mode)&&(!cfg_speed)&&(cfg_dir));
 		always @(posedge i_clk)
 			cover((o_wb_ack)&&(cfg_mode)&&(!cfg_speed)&&(!cfg_dir));
+	end else begin
+
+		always @(posedge i_clk)
+			cover(!maintenance);
+
 	end endgenerate
 
 `endif

@@ -1,23 +1,23 @@
 [tasks]
-xilinx  prf optpipe optcfg optstartup
-xilinxc cvr optpipe optcfg
-xilinxs cvr optpipe optcfg optstartup
-bare    prf
-barep   prf optpipe
-barecfg prf optpipe optcfg
-cfgonly prf optcfg
-ice40   prf optpipe optcfg optstartup
-ice40c  cvr optpipe optcfg
-ice40s  cvr optpipe optcfg optstartup
-ice40div    prf optpipe optcfg divone optstartup
-ice40divc   cvr optpipe optcfg divone
-ice40divs   cvr optpipe optcfg divone optstartup
-xilinxdiv   xilinx prf optpipe optcfg divone
-xilinxdivc  xilinx cvr optpipe optcfg divone
-xilinxdivs  xilinx cvr optpipe optcfg divone optstartup
-divthree  prf optpipe optcfg
-divfive   prf optpipe optcfg
-divfives  cvr optpipe optcfg optstartup
+bare       prf
+barep      prf optpipe
+barecfg    prf optpipe optcfg
+cfgonly    prf         optcfg
+divthree   prf optpipe optcfg
+divfive    prf optpipe optcfg
+divfives   cvr optpipe optcfg optstartup
+ice40      prf optpipe optcfg optstartup
+ice40c     cvr optpipe optcfg
+ice40s     cvr optpipe optcfg optstartup
+ice40div   prf optpipe optcfg optstartup divone
+ice40divc  cvr optpipe optcfg            divone
+ice40divs  cvr optpipe optcfg optstartup divone
+xilinx     prf optpipe optcfg optstartup
+xilinxc    cvr optpipe optcfg
+xilinxs    cvr optpipe optcfg optstartup
+xilinxdiv  prf optpipe optcfg            divone xilinx
+xilinxdivc cvr optpipe optcfg            divone xilinx
+xilinxdivs cvr optpipe optcfg optstartup divone xilinx
 
 [options]
 prf: mode prove
@@ -29,7 +29,9 @@ divthree:   depth 102
 divfive:    depth 155
 ice40s:     depth 150
 xilinxs:    depth 160
+ice40divc:  depth  72
 ice40divs:  depth 250
+xilinxdivc: depth  80
 xilinxdivs: depth 250
 divfives:   depth 610
 

@@ -92,8 +92,9 @@ $(DSPI) : $(DSPI)_bare/PASS      $(DSPI)_barep/PASS      $(DSPI)_barecfg/PASS
 $(DSPI) : $(DSPI)_cfgonly/PASS
 $(DSPI) : $(DSPI)_ice40/PASS     $(DSPI)_ice40c/PASS     $(DSPI)_ice40s/PASS
 $(DSPI) : $(DSPI)_xilinx/PASS    $(DSPI)_xilinxc/PASS    $(DSPI)_xilinxs/PASS
-$(DSPI) : $(DSPI)_ice40div/PASS  $(DSPI)_ice40divc/PASS # $(DSPI)_ice40divs/PASS
-$(DSPI) : $(DSPI)_xilinxdiv/PASS $(DSPI)_xilinxdivc/PASS #$(DSPI)_xilinxdivs/PASS
+$(DSPI) : $(DSPI)_ice40div/PASS  $(DSPI)_ice40divc/PASS  #$(DSPI)_ice40divs/PASS
+$(DSPI) : $(DSPI)_xilinxdiv/PASS $(DSPI)_xilinxdivc/PASS#$(DSPI)_xilinxdivs/PASS
+$(DSPI) : $(DSPI)_arrow/PASS     $(DSPI)_arrowc/PASS     $(DSPI)_arrows/PASS
 $(DSPI) : $(DSPI)_divthree/PASS  $(DSPI)_divfive/PASS
 # $(DSPI)_divfives/PASS
 $(DSPI)_bare/PASS:      $(DSPI).sby $(RTL)/$(DSPI).v
@@ -134,6 +135,12 @@ $(DSPI)_divfive/PASS:    $(DSPI).sby $(RTL)/$(DSPI).v
 	sby -f $(DSPI).sby divfive
 $(DSPI)_divfives/PASS:   $(DSPI).sby $(RTL)/$(DSPI).v
 	sby -f $(DSPI).sby divfives
+$(DSPI)_arrow/PASS:   $(DSPI).sby $(RTL)/$(DSPI).v
+	sby -f $(DSPI).sby arrow
+$(DSPI)_arrowc/PASS:   $(DSPI).sby $(RTL)/$(DSPI).v
+	sby -f $(DSPI).sby arrowc
+$(DSPI)_arrows/PASS:   $(DSPI).sby $(RTL)/$(DSPI).v
+	sby -f $(DSPI).sby arrows
 
 .PHONY: $(QSPI)
 $(QSPI) : $(QSPI)_bare/PASS      $(QSPI)_barep/PASS      $(QSPI)_barecfg/PASS

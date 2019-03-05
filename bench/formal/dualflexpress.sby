@@ -18,6 +18,9 @@ xilinxdivc  xilinx cvr optpipe optcfg divone
 divthree  prf optpipe optcfg
 divfive   prf optpipe optcfg
 # divfives  cvr optpipe optcfg optstartup
+arrow     prf divone optpipe optcfg optstartup
+arrowc    cvr divone optpipe optcfg
+arrows    cvr divone optpipe optcfg optstartup
 
 [options]
 prf: mode prove
@@ -28,7 +31,8 @@ divone:     depth 120
 divthree:   depth 152
 divfive:    depth 230
 ice40s:     depth 120
-xilinxs:    depth 110
+xilinxs:    depth 120
+arrows:     depth 250
 # ice40divs:  depth 250
 # xilinxdivs: depth 250
 # divfives:   depth 610
@@ -53,6 +57,10 @@ divfive:     chparam -set OPT_CLKDIV  5 dualflexpress
 
 optstartup:  chparam -set OPT_STARTUP 1 dualflexpress
 ~optstartup: chparam -set OPT_STARTUP 0 dualflexpress
+
+arrow:       chparam -set RDDELAY     2 -set NDUMMY 4 dualflexpress
+arrowc:      chparam -set RDDELAY     2 -set NDUMMY 4 dualflexpress
+arrows:      chparam -set RDDELAY     2 -set NDUMMY 4 dualflexpress
 
 prep -top dualflexpress
 

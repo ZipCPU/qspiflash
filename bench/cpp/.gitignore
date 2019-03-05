@@ -1,0 +1,6 @@
+eqspiflash_tb.cpp
+eqspiflashsim.cpp
+eqspiflashsim.h
+qspiflash_tb.cpp
+qspiflashsim.cpp
+qspiflashsim.h

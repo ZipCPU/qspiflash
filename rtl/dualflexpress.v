@@ -1365,7 +1365,7 @@ module	dualflexpress(i_clk, i_reset,
 		assert(o_dspi_sck);
 
 	always @(posedge i_clk)
-	if (|f_memread[F_MEMDONE-16-NDUMMY+4:0])
+	if (|f_memread[F_MEMDONE-16-NDUMMY+4-1:0])
 		assert(o_dspi_mod == DUAL_WRITE);
 	else if (|f_memread[F_MEMDONE-16-1:F_MEMDONE-16-NDUMMY+4])
 	// begin assert(1); end

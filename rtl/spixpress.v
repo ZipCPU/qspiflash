@@ -35,7 +35,7 @@
 // 			control port may be read to see what values were
 // 			read from the SPI port.  Those values will be stored
 // 			in these same bits [7:0].
-// 
+//
 //	Memory
 //		Returns the data from the address read
 //
@@ -303,7 +303,7 @@ module	spixpress(i_clk, i_reset,
 	// Reset logic
 	//
 	////////
-	
+
 	initial	assume(i_reset);
 	always @(*)
 	if (!f_past_valid)

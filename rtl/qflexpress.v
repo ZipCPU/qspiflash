@@ -118,7 +118,7 @@ module	qflexpress(i_clk, i_reset,
 	// two clocks of the Quad output mode byte, 0xa0.  The default is 10
 	// for a Micron device.  Windbond seems to want 2.  Note your flash
 	// device carefully when you choose this value.
-	// 
+	//
 	parameter	NDUMMY = 6;
 	//
 	// For dealing with multiple flash devices, the OPT_STARTUP_FILE allows
@@ -649,7 +649,7 @@ module	qflexpress(i_clk, i_reset,
 		else if (new_word)
 			f_last_word <= m_this_word;
 
-		
+
 		initial	f_mspi = 0;
 		always @(posedge i_clk)
 		if (i_reset)
@@ -1061,7 +1061,7 @@ module	qflexpress(i_clk, i_reset,
 			stall_pipe <= { stall_pipe[RDDELAY-2:0], not_done };
 		else
 			stall_pipe[0] <= not_done;
-		
+
 		always @(*)
 			o_wb_ack = ack_pipe[RDDELAY-1];
 
@@ -1929,7 +1929,7 @@ module	qflexpress(i_clk, i_reset,
 	// Crossover checks
 	//
 	wire	f_qspi_not_done, f_qspi_not_ackd, f_qspi_active, f_qspi_ack;
-	assign	f_qspi_not_done = 
+	assign	f_qspi_not_done =
 			(|f_memread[F_MEMDONE-1:0])
 			||(|f_piperead[F_PIPEDONE-1:0])
 			||(|f_cfglswrite[F_CFGLSDONE-1:0])

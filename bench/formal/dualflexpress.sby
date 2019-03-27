@@ -18,9 +18,9 @@ xilinxdivc  xilinx cvr optpipe optcfg divone
 divthree  prf optpipe optcfg
 divfive   prf optpipe optcfg
 # divfives  cvr optpipe optcfg optstartup
-arrow     prf divone optpipe optcfg optstartup
-arrowc    cvr divone optpipe optcfg
-arrows    cvr divone optpipe optcfg optstartup
+arrow     prf optpipe optcfg optstartup
+arrowc    cvr optpipe optcfg
+arrows    cvr optpipe optcfg optstartup
 
 [options]
 prf: mode prove
@@ -28,8 +28,10 @@ prf: depth 40
 cvr: mode cover
 cvr: depth 145
 divone:     depth 120
-divthree:   depth 152
-divfive:    depth 230
+divthree:   depth 150
+divfive:    depth 222
+xilinxdiv:  depth  80
+ice40div:   depth  80
 ice40s:     depth 120
 xilinxs:    depth 120
 arrows:     depth 250

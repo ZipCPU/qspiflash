@@ -12,8 +12,7 @@
 //
 //	Three modes/states of operation:
 //	1. Startup/maintenance, places the device in the Quad XIP mode
-//	2. Normal operations, takes 33 clocks to read a value
-//	   - 16 subsequent clocks will read a piped value
+//	2. Normal operations, takes 12+8N clocks to read a value
 //	3. Configuration--useful to allow an external controller issue erase
 //		or program commands (or other) without requiring us to
 //		clutter up the logic with a giant state machine
@@ -21,22 +20,13 @@
 //	STARTUP
 //	 1. Waits for the flash to come on line
 //		Start out idle for 300 uS
-//	 2. Sends a signal to remove the flash from any DSPI read mode.  In our
+//	 2. Sends a signal to remove the flash from any QSPI read mode.  In our
 //		case, we'll send several clocks of an empty command.  In SPI
 //		mode, it'll get ignored.  In QSPI mode, it'll remove us from
-//		DSPI mode.
-//	 3. Explicitly places and leaves the flash into DSPI mode
-//		0xEB 3(0xa0) 0xa0 0xa0 0xa0 4(0x00)
+//		QSPI mode.
+//	 3. Explicitly places and leaves the flash into QSPI mode
+//		0xEB 3(0x00) 0xa0 6(0x00)
 //	 4. All done
-//
-//	NORMAL-OPS
-//	ODATA <- ?, 3xADDR, 0xa0, 0x00, 0x00 | 0x00, 0x00, 0x00, 0x00 ? (22nibs)
-//	STALL <- TRUE until closed at the end
-//	MODE  <- 2'b10 for 4 clks, then 2'b11
-//	CLK   <- 2'b10 before starting, then 2'b01 until the end
-//	CSN   <- 0 any time CLK != 2'b11
-//
-//
 //
 // Creator:	Dan Gisselquist, Ph.D.
 //		Gisselquist Technology, LLC
@@ -87,7 +77,7 @@ module	qflexpress(i_clk, i_reset,
 	// OPT_PIPE makes it possible to string multiple requests together,
 	// with no intervening need to shutdown the QSPI connection and send a
 	// new address
-	parameter [0:0]	OPT_PIPE    = 1'b0;
+	parameter [0:0]	OPT_PIPE    = 1'b1;
 	//
 	// OPT_CFG enables the configuration logic port, and hence the
 	// ability to erase and program the flash, as well as the ability
@@ -116,10 +106,10 @@ module	qflexpress(i_clk, i_reset,
 				: ((OPT_CLKDIV < 256) ? 8 : 9))))))));
 	//
 	// RDDELAY is the number of clock cycles from when o_qspi_dat is valid
-	// until i_qspi_dat is valid.  Read delays from 0-4 have been verified
+	// until i_qspi_dat is valid.  Read delays from 0-4 have been verified.
 	// DDR Registered I/O on a Xilinx device can be done with a RDDELAY=3
-	//	On Intel/Altera devices, RDDELAY=2 works
-	//	I'm using RDDELAY=0 for my iCE40 devices
+	// On Intel/Altera devices, RDDELAY=2 works
+	// I'm using RDDELAY=0 for my iCE40 devices
 	//
 	parameter	RDDELAY = 0;
 	//
@@ -129,8 +119,12 @@ module	qflexpress(i_clk, i_reset,
 	// for a Micron device.  Windbond seems to want 2.  Note your flash
 	// device carefully when you choose this value.
 	// 
-	parameter	NDUMMY = 10;
+	parameter	NDUMMY = 6;
 	//
+	// For dealing with multiple flash devices, the OPT_STARTUP_FILE allows
+	// a hex file to be provided containing the necessary script to place
+	// the design into the proper initial configuration.
+	parameter	OPT_STARTUP_FILE="";
 	//
 	//
 	//
@@ -170,6 +164,7 @@ module	qflexpress(i_clk, i_reset,
 	output	reg	[1:0]	o_qspi_mod;
 	output	wire	[3:0]	o_qspi_dat;
 	input	wire	[3:0]	i_qspi_dat;
+	//
 	// Debugging port
 	// output	wire		o_dbg_trigger;
 	// output	wire	[31:0]	o_debug;
@@ -343,7 +338,10 @@ module	qflexpress(i_clk, i_reset,
 		//			mode.  Ignored otherwis
 		//
 		integer k;
-		initial begin
+		initial
+		// if (OPT_STARTUP_FILE)
+		//	$readmemh(OPT_STARTUP_FILE, m_cmd_word); else
+		begin
 		for(k=0; k<(1<<M_LGADDR); k=k+1)
 			m_cmd_word[k] = -1;
 		// cmd_word= m_ctr_flag, m_mod[1:0],
@@ -428,7 +426,7 @@ module	qflexpress(i_clk, i_reset,
 
 		//
 		initial	maintenance = 1'b1;
-		initial	m_cmd_index = 0;
+		initial	m_cmd_index = M_FIRSTIDX;
 		always @(posedge i_clk)
 		if (i_reset)
 		begin
@@ -437,7 +435,8 @@ module	qflexpress(i_clk, i_reset,
 		end else if (new_word)
 		begin
 			maintenance <= (maintenance)&&(!m_final);
-			m_cmd_index <= m_cmd_index + 1'b1;
+			if (!(&m_cmd_index))
+				m_cmd_index <= m_cmd_index + 1'b1;
 		end
 
 		initial	m_this_word = -1;
@@ -450,7 +449,7 @@ module	qflexpress(i_clk, i_reset,
 		if (i_reset)
 			m_final <= 1'b0;
 		else if (new_word)
-			m_final <= (&m_cmd_index);
+			m_final <= (m_final || (&m_cmd_index));
 
 		//
 		// m_midcount .. are we in the middle of a counter/pause?
@@ -474,7 +473,7 @@ module	qflexpress(i_clk, i_reset,
 			begin
 				m_counter <= m_this_word[M_WAITBIT-1:0];
 `ifdef	FORMAL
-				if (m_this_word[M_WAITBIT-1:0] > 3);
+				if (m_this_word[M_WAITBIT-1:0] > 3)
 					m_counter <= 3;
 `endif
 			end
@@ -508,10 +507,10 @@ module	qflexpress(i_clk, i_reset,
 				m_bitcount <= 0;
 			end else begin
 				m_cs_n <= 1'b0;
-				m_mod  <= m_this_word[M_WAITBIT-1:M_WAITBIT-2];
-				m_bitcount <= (m_cs_n) ? 4'h2 : 4'h1;
-				if (!m_this_word[M_WAITBIT-1])
-					m_bitcount <= (m_cs_n) ? 4'h8 : 4'h7;//i.e.7
+				m_mod  <= m_this_word[9:8];
+				m_bitcount <= (!OPT_ODDR && m_cs_n) ? 4'h2 : 4'h1;
+				if (!m_this_word[9])
+					m_bitcount <= (!OPT_ODDR && m_cs_n) ? 4'h8 : 4'h7;//i.e.7
 			end
 		end
 
@@ -520,7 +519,7 @@ module	qflexpress(i_clk, i_reset,
 		begin
 			if (m_bitcount == 0)
 			begin
-				if (m_cs_n)
+				if (!OPT_ODDR && m_cs_n)
 				begin
 					m_dat <= {(3){m_this_word[7]}};
 					m_byte <= m_this_word[7:0];
@@ -563,8 +562,7 @@ module	qflexpress(i_clk, i_reset,
 				m_clk <= 1'b1;
 			else if (m_midcount)
 				m_clk <= 1'b1;
-			else if (m_ce && m_bitcount == 0
-					&& m_this_word[M_WAITBIT])
+			else if (new_word && m_this_word[M_WAITBIT])
 				m_clk <= 1'b1;
 			else if (ckneg)
 				m_clk <= 1'b0;
@@ -576,14 +574,14 @@ module	qflexpress(i_clk, i_reset,
 		always @(*)
 		begin
 			assert((m_cmd_word[f_const_addr][M_WAITBIT])
-				||(m_cmd_word[f_const_addr][M_WAITBIT-1:M_WAITBIT-2] != 2'b01));
+				||(m_cmd_word[f_const_addr][9:8] != 2'b01));
 			if (m_cmd_word[f_const_addr][M_WAITBIT])
 				assert(m_cmd_word[f_const_addr][M_WAITBIT-3:0] > 0);
 		end
 		always @(*)
 		begin
 			if (m_cmd_index != f_const_addr)
-				assume((m_cmd_word[m_cmd_index][M_WAITBIT])||(m_cmd_word[m_cmd_index][M_WAITBIT-1:M_WAITBIT-2] != 2'b01));
+				assume((m_cmd_word[m_cmd_index][M_WAITBIT])||(m_cmd_word[m_cmd_index][9:8] != 2'b01));
 			if (m_cmd_word[m_cmd_index][M_WAITBIT])
 				assume(m_cmd_word[m_cmd_index][M_WAITBIT-3:0]>0);
 		end
@@ -591,7 +589,7 @@ module	qflexpress(i_clk, i_reset,
 		always @(*)
 		begin
 			assert((m_this_word[M_WAITBIT])
-				||(m_this_word[M_WAITBIT-1:M_WAITBIT-2] != 2'b01));
+				||(m_this_word[9:8] != 2'b01));
 			if (m_this_word[M_WAITBIT])
 				assert(m_this_word[M_WAITBIT-3:0] > 0);
 		end
@@ -613,26 +611,9 @@ module	qflexpress(i_clk, i_reset,
 		always @(posedge i_clk)
 			assert(m_midcount == (m_counter != 0));
 
-		reg	[20:0]	f_mpipe;
-		initial	f_mpipe = 0;
-		always @(posedge i_clk)
-		if (i_reset)
-			f_mpipe <= 0;
-		else
-			f_mpipe <= { f_mpipe[19:0], (m_cmd_index == 5'h15) };
-
 		always @(posedge i_clk)
 		begin
 			cover(!maintenance);
-			cover(f_mpipe[3]);
-			cover(f_mpipe[4]);
-			cover(f_mpipe[5]);
-			cover(f_mpipe[6]);
-			cover(f_mpipe[7]);
-			cover(f_mpipe[8]);
-			cover(f_mpipe[9]);
-			cover(f_mpipe[10]);
-			cover(f_mpipe[11]);
 			cover(m_cmd_index == 5'h0a);
 			cover(m_cmd_index == 5'h0b);
 			cover(m_cmd_index == 5'h0c);
@@ -645,18 +626,118 @@ module	qflexpress(i_clk, i_reset,
 			cover(m_cmd_index == 5'h13);
 			cover(m_cmd_index == 5'h14);
 			cover(m_cmd_index == 5'h15);
-			cover(m_cmd_index == 5'h16);	// @ 470
-			cover(m_cmd_index == 5'h17);	// @482
-			cover(m_cmd_index == 5'h18);	// @ 494
-			cover(m_cmd_index == 5'h19);	// @ 506
-			cover(m_cmd_index == 5'h1a);	// @ 518
-			cover(m_cmd_index == 5'h1b);	// @ 530
-			cover(m_cmd_index == 5'h1c);	// @ 542
-			cover(m_cmd_index == 5'h1d);	// @ 554
-			cover(m_cmd_index == 5'h1e);	// @ 572
-			cover(m_cmd_index == 5'h1f);	// @ 590
-					// 602
+			cover(m_cmd_index == 5'h16);
+			cover(m_cmd_index == 5'h17);
+			cover(m_cmd_index == 5'h18);
+			cover(m_cmd_index == 5'h19);
+			cover(m_cmd_index == 5'h1a);
+			cover(m_cmd_index == 5'h1b);
+			cover(m_cmd_index == 5'h1c);
+			cover(m_cmd_index == 5'h1d);
+			cover(m_cmd_index == 5'h1e);
+			cover(m_cmd_index == 5'h1f);
 		end
+
+		reg	[M_WAITBIT:0]	f_last_word;
+		reg	[8:0]		f_mspi;
+		reg	[2:0]		f_mqspi;
+
+		initial	f_last_word = -1;
+		always @(posedge i_clk)
+		if (i_reset)
+			f_last_word = -1;
+		else if (new_word)
+			f_last_word <= m_this_word;
+
+		
+		initial	f_mspi = 0;
+		always @(posedge i_clk)
+		if (i_reset)
+			f_mspi <= 0;
+		else if (ckstb) begin
+			f_mspi <= f_mspi << 1;
+			if (maintenance && !m_final &&  new_word
+				&&(!m_this_word[M_WAITBIT])
+				&&(m_this_word[9:8] == NORMAL_SPI))
+			begin
+				if (m_cs_n && !OPT_ODDR)
+					f_mspi[0] <= 1'b1;
+				else
+					f_mspi[1] <= 1'b1;
+			end
+		end
+
+		initial	f_mqspi = 0;
+		always @(posedge i_clk)
+		if (i_reset)
+			f_mqspi <= 0;
+		else if (ckstb) begin
+			f_mqspi <= f_mqspi << 1;
+			if (maintenance && !m_final && new_word
+				&&(!m_this_word[M_WAITBIT])
+				&&(m_this_word[9]))
+			begin
+				if (m_cs_n && !OPT_ODDR)
+					f_mqspi[0] <= 1'b1;
+				else
+					f_mqspi[1] <= 1'b1;
+			end
+		end
+
+		always @(*)
+		if (OPT_ODDR)
+			assert(!f_mspi[0] && !f_mqspi[0]);
+
+
+		always @(*)
+		if ((|f_mspi) || (|f_mqspi))
+		begin
+
+			assert(maintenance);
+			assert(!m_cs_n);
+			assert(m_mod == f_last_word[9:8]);
+			assert(m_midcount == 1'b0);
+
+		end else if (maintenance && o_qspi_cs_n)
+		begin
+			assert(f_last_word[M_WAITBIT]);
+			assert(m_counter <= f_last_word[M_WAITBIT-1:0]);
+			assert(m_midcount == (m_counter != 0));
+			assert(m_cs_n);
+		end
+
+		always @(*)
+			assert((f_mspi == 0)||(f_mqspi == 0));
+
+		always @(*)
+		if (|f_mspi)
+			assert(m_mod == NORMAL_SPI);
+
+		always @(*)
+		case(f_mspi[8:1])
+		8'h00: begin end
+		8'h01: assert(m_dat[0] == f_last_word[7]);
+		8'h02: assert(m_dat[0] == f_last_word[6]);
+		8'h04: assert(m_dat[0] == f_last_word[5]);
+		8'h08: assert(m_dat[0] == f_last_word[4]);
+		8'h10: assert(m_dat[0] == f_last_word[3]);
+		8'h20: assert(m_dat[0] == f_last_word[2]);
+		8'h40: assert(m_dat[0] == f_last_word[1]);
+		8'h80: assert(m_dat[0] == f_last_word[0]);
+		default: begin assert(0); end
+		endcase
+
+		always @(*)
+		if (|f_mqspi)
+			assert(m_mod == QUAD_WRITE || m_mod == QUAD_READ);
+
+		always @(*)
+		case(f_mqspi[2:1])
+		2'b00: begin end
+		2'b01: assert(m_dat[3:0] == f_last_word[7:4]);
+		2'b10: assert(m_dat[3:0] == f_last_word[3:0]);
+		default: begin assert(f_mqspi != 2'b11); end
+		endcase
 `endif
 	end else begin : NO_STARTUP_OPT
 
@@ -697,13 +778,18 @@ module	qflexpress(i_clk, i_reset,
 			data_pipe[8+LGFLASHSZ-1:0] <= {
 					i_wb_addr, 2'b00, 4'ha, 4'h0 };
 
-			if (cfg_write)
+			if (i_cfg_stb)
+				// High speed configuration I/O
 				data_pipe[31:24] <= i_wb_data[7:0];
 
-			if ((cfg_write)&&(!i_wb_data[QSPEED_BIT]))
-			begin
+			if ((i_cfg_stb)&&(!i_wb_data[QSPEED_BIT]))
+			begin // Low speed configuration I/O
 				data_pipe[28] <= i_wb_data[7];
 				data_pipe[24] <= i_wb_data[6];
+			end
+
+			if (i_cfg_stb)
+			begin // These can be set independent of speed
 				data_pipe[20] <= i_wb_data[5];
 				data_pipe[16] <= i_wb_data[4];
 				data_pipe[12] <= i_wb_data[3];
@@ -765,8 +851,13 @@ module	qflexpress(i_clk, i_reset,
 	if ((i_reset)||(maintenance))
 		clk_ctr <= 0;
 	else if ((bus_request)&&(!pipe_req))
+		// Notice that this is only for
+		// regular bus reads, and so the check for
+		// !pipe_req
 		clk_ctr <= 5'd14 + NDUMMY + (OPT_ODDR ? 0:1);
 	else if (bus_request) // && pipe_req
+		// Otherwise, if this is a piped read, we'll
+		// reset the counter back to eight.
 		clk_ctr <= 5'd8;
 	else if (cfg_ls_write)
 		clk_ctr <= 5'd8 + ((OPT_ODDR) ? 0:1);
@@ -1260,7 +1351,7 @@ module	qflexpress(i_clk, i_reset,
 
 	always @(posedge i_clk)
 	if ((OPT_CLKDIV==1)&&(!o_qspi_cs_n)&&(!$past(o_qspi_cs_n))
-		&&(!$past(o_qspi_cs_n,2))&&(!cfg_mode))
+			&&(!$past(o_qspi_cs_n,2))&&(!cfg_mode))
 		assert(o_qspi_sck != $past(o_qspi_sck));
 
 	/////////////////
@@ -1468,8 +1559,8 @@ module	qflexpress(i_clk, i_reset,
 	always @(posedge i_clk)
 	if (f_memread[F_MEMDONE])
 		assert((clk_ctr == 0)||((OPT_PIPE)&&(clk_ctr == F_PIPEDONE)));
-	else if (|f_memread[F_MEMDONE-1:0])
-		assert(f_memread[F_MEMDONE-clk_ctr]);
+	// else if (|f_memread[F_MEMDONE-1:0])
+	//	assert(f_memread[F_MEMDONE-clk_ctr]);
 
 	generate for(k=0; k<F_MEMACK-1; k=k+1)
 	begin : ONEHOT_MEMREAD
@@ -1728,7 +1819,7 @@ module	qflexpress(i_clk, i_reset,
 	begin
 
 		always @(posedge i_clk)
-		if ((OPT_ODDR)&&(|f_cfghswrite[F_CFGHSACK:F_CFGHSDONE]))
+		if (|f_cfghswrite[F_CFGHSACK:F_CFGHSDONE])
 			assert(!actual_sck);
 
 	end endgenerate

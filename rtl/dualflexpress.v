@@ -29,15 +29,6 @@
 //		0xEB 3(0xa0) 0xa0 0xa0 0xa0 4(0x00)
 //	 4. All done
 //
-//	NORMAL-OPS
-//	ODATA <- ?, 3xADDR, 0xa0, 0x00, 0x00 | 0x00, 0x00, 0x00, 0x00 ? (22nibs)
-//	STALL <- TRUE until closed at the end
-//	MODE  <- 2'b10 for 4 clks, then 2'b11
-//	CLK   <- 2'b10 before starting, then 2'b01 until the end
-//	CSN   <- 0 any time CLK != 2'b11
-//
-//
-//
 // Creator:	Dan Gisselquist, Ph.D.
 //		Gisselquist Technology, LLC
 //
@@ -98,7 +89,7 @@ module	dualflexpress(i_clk, i_reset,
 	parameter [0:0]	OPT_CFG     = 1'b1;
 	//
 	// OPT_STARTUP enables the startup logic
-	parameter [0:0]	OPT_STARTUP = 1'b0;
+	parameter [0:0]	OPT_STARTUP = 1'b1;
 	//
 	parameter	OPT_CLKDIV = 0;
 	//
@@ -120,8 +111,8 @@ module	dualflexpress(i_clk, i_reset,
 	// RDDELAY is the number of clock cycles from when o_dspi_dat is valid
 	// until i_dspi_dat is valid.  Read delays from 0-4 have been verified
 	// DDR Registered I/O on a Xilinx device can be done with a RDDELAY=3
-	//	On Intel/Altera devices, RDDELAY=2 works
-	//	I'm using RDDELAY=0 for my iCE40 devices
+	// On Intel/Altera devices, RDDELAY=2 works
+	// I'm using RDDELAY=0 for my iCE40 devices
 	//
 	parameter	RDDELAY = 0;
 	//
@@ -133,6 +124,10 @@ module	dualflexpress(i_clk, i_reset,
 	// 
 	parameter	NDUMMY = 8;
 	//
+	// For dealing with multiple flash devices, the OPT_STARTUP_FILE allows
+	// a hex file to be provided containing the necessary script to place
+	// the design into the proper initial configuration.
+	parameter	OPT_STARTUP_FILE="";
 	//
 	//
 	//
@@ -411,7 +406,8 @@ module	dualflexpress(i_clk, i_reset,
 		end else if (new_word)
 		begin
 			maintenance <= (maintenance)&&(!m_final);
-			m_cmd_index <= m_cmd_index + 1'b1;
+			if (!(&m_cmd_index))
+				m_cmd_index <= m_cmd_index + 1'b1;
 		end
 
 		initial	m_this_word = -1;
@@ -424,7 +420,7 @@ module	dualflexpress(i_clk, i_reset,
 		if (i_reset)
 			m_final <= 1'b0;
 		else if (new_word)
-			m_final <= (&m_cmd_index);
+			m_final <= (m_final || (&m_cmd_index));
 
 		//
 		// m_midcount .. are we in the middle of a counter/pause?
@@ -448,7 +444,7 @@ module	dualflexpress(i_clk, i_reset,
 			begin
 				m_counter <= m_this_word[M_WAITBIT-1:0];
 `ifdef	FORMAL
-				if (m_this_word[M_WAITBIT-1:0] > 3);
+				if (m_this_word[M_WAITBIT-1:0] > 3)
 					m_counter <= 3;
 `endif
 			end
@@ -482,9 +478,9 @@ module	dualflexpress(i_clk, i_reset,
 				m_bitcount <= 0;
 			end else begin
 				m_cs_n <= 1'b0;
-				m_mod  <= m_this_word[M_WAITBIT-1:M_WAITBIT-2];
+				m_mod  <= m_this_word[9:8];
 				m_bitcount <= (!OPT_ODDR && m_cs_n) ? 4'h4 : 4'h3;
-				if (!m_this_word[M_WAITBIT-1])
+				if (!m_this_word[9])
 					m_bitcount <= (!OPT_ODDR && m_cs_n) ? 4'h8 : 4'h7;//i.e.7
 			end
 		end
@@ -530,14 +526,13 @@ module	dualflexpress(i_clk, i_reset,
 			always @(posedge i_clk)
 			if (i_reset)
 				m_clk <= 1'b1;
-			else if (!OPT_ODDR && m_cs_n)
+			else if (m_cs_n)
 				m_clk <= 1'b1;
 			else if ((!m_clk)&&(ckpos))
 				m_clk <= 1'b1;
 			else if (m_midcount)
 				m_clk <= 1'b1;
-			else if (m_ce && m_bitcount == 0
-					&& m_this_word[M_WAITBIT])
+			else if (new_word && m_this_word[M_WAITBIT])
 				m_clk <= 1'b1;
 			else if (ckneg)
 				m_clk <= 1'b0;
@@ -549,14 +544,14 @@ module	dualflexpress(i_clk, i_reset,
 		always @(*)
 		begin
 			assert((m_cmd_word[f_const_addr][M_WAITBIT])
-				||(m_cmd_word[f_const_addr][M_WAITBIT-1:M_WAITBIT-2] != 2'b01));
+				||(m_cmd_word[f_const_addr][9:8] != 2'b01));
 			if (m_cmd_word[f_const_addr][M_WAITBIT])
 				assert(m_cmd_word[f_const_addr][M_WAITBIT-3:0] > 0);
 		end
 		always @(*)
 		begin
 			if (m_cmd_index != f_const_addr)
-				assume((m_cmd_word[m_cmd_index][M_WAITBIT])||(m_cmd_word[m_cmd_index][M_WAITBIT-1:M_WAITBIT-2] != 2'b01));
+				assume((m_cmd_word[m_cmd_index][M_WAITBIT])||(m_cmd_word[m_cmd_index][9:8] != 2'b01));
 			if (m_cmd_word[m_cmd_index][M_WAITBIT])
 				assume(m_cmd_word[m_cmd_index][M_WAITBIT-3:0]>0);
 		end
@@ -564,7 +559,7 @@ module	dualflexpress(i_clk, i_reset,
 		always @(*)
 		begin
 			assert((m_this_word[M_WAITBIT])
-				||(m_this_word[M_WAITBIT-1:M_WAITBIT-2] != 2'b01));
+				||(m_this_word[9:8] != 2'b01));
 			if (m_this_word[M_WAITBIT])
 				assert(m_this_word[M_WAITBIT-3:0] > 0);
 		end
@@ -586,26 +581,9 @@ module	dualflexpress(i_clk, i_reset,
 		always @(posedge i_clk)
 			assert(m_midcount == (m_counter != 0));
 
-		reg	[20:0]	f_mpipe;
-		initial	f_mpipe = 0;
-		always @(posedge i_clk)
-		if (i_reset)
-			f_mpipe <= 0;
-		else
-			f_mpipe <= { f_mpipe[19:0], (m_cmd_index == 5'h15) };
-
 		always @(posedge i_clk)
 		begin
 			cover(!maintenance);
-			cover(f_mpipe[3]);
-			cover(f_mpipe[4]);
-			cover(f_mpipe[5]);
-			cover(f_mpipe[6]);
-			cover(f_mpipe[7]);
-			cover(f_mpipe[8]);
-			cover(f_mpipe[9]);
-			cover(f_mpipe[10]);
-			cover(f_mpipe[11]);
 			cover(m_cmd_index == 5'h0a);
 			cover(m_cmd_index == 5'h0b);
 			cover(m_cmd_index == 5'h0c);
@@ -618,18 +596,120 @@ module	dualflexpress(i_clk, i_reset,
 			cover(m_cmd_index == 5'h13);
 			cover(m_cmd_index == 5'h14);
 			cover(m_cmd_index == 5'h15);
-			cover(m_cmd_index == 5'h16);	// @ 470
-			cover(m_cmd_index == 5'h17);	// @482
-			cover(m_cmd_index == 5'h18);	// @ 494
-			cover(m_cmd_index == 5'h19);	// @ 506
-			cover(m_cmd_index == 5'h1a);	// @ 518
-			cover(m_cmd_index == 5'h1b);	// @ 530
-			cover(m_cmd_index == 5'h1c);	// @ 542
-			cover(m_cmd_index == 5'h1d);	// @ 554
-			cover(m_cmd_index == 5'h1e);	// @ 572
-			cover(m_cmd_index == 5'h1f);	// @ 590
-					// 602
+			cover(m_cmd_index == 5'h16);
+			cover(m_cmd_index == 5'h17);
+			cover(m_cmd_index == 5'h18);
+			cover(m_cmd_index == 5'h19);
+			cover(m_cmd_index == 5'h1a);
+			cover(m_cmd_index == 5'h1b);
+			cover(m_cmd_index == 5'h1c);
+			cover(m_cmd_index == 5'h1d);
+			cover(m_cmd_index == 5'h1e);
+			cover(m_cmd_index == 5'h1f);
 		end
+
+		reg	[M_WAITBIT:0]	f_last_word;
+		reg	[8:0]		f_mspi;
+		reg	[4:0]		f_mdspi;
+
+		initial	f_last_word = -1;
+		always @(posedge i_clk)
+		if (i_reset)
+			f_last_word = -1;
+		else if (new_word)
+			f_last_word <= m_this_word;
+
+		
+		initial	f_mspi = 0;
+		always @(posedge i_clk)
+		if (i_reset)
+			f_mspi <= 0;
+		else if (ckstb) begin
+			f_mspi <= f_mspi << 1;
+			if (maintenance && !m_final &&  new_word
+				&&(!m_this_word[M_WAITBIT])
+				&&(m_this_word[9:8] == NORMAL_SPI))
+			begin
+				if (m_cs_n && !OPT_ODDR)
+					f_mspi[0] <= 1'b1;
+				else
+					f_mspi[1] <= 1'b1;
+			end
+		end
+
+		initial	f_mdspi = 0;
+		always @(posedge i_clk)
+		if (i_reset)
+			f_mdspi <= 0;
+		else if (ckstb) begin
+			f_mdspi <= f_mdspi << 1;
+			if (maintenance && !m_final && new_word
+				&&(!m_this_word[M_WAITBIT])
+				&&(m_this_word[9]))
+			begin
+				if (m_cs_n && !OPT_ODDR)
+					f_mdspi[0] <= 1'b1;
+				else
+					f_mdspi[1] <= 1'b1;
+			end
+		end
+
+		always @(*)
+		if (OPT_ODDR)
+			assert(!f_mspi[0] && !f_mdspi[0]);
+
+
+		always @(*)
+		if ((|f_mspi) || (|f_mdspi))
+		begin
+
+			assert(maintenance);
+			assert(!m_cs_n);
+			assert(m_mod == f_last_word[9:8]);
+			assert(m_midcount == 1'b0);
+
+		end else if (maintenance && m_cs_n)
+		begin
+			assert(f_last_word[M_WAITBIT]);
+			assert(m_counter <= f_last_word[M_WAITBIT-1:0]);
+			assert(m_midcount == (m_counter != 0));
+			assert(m_cs_n);
+		end
+
+		always @(*)
+			assert((f_mspi == 0)||(f_mdspi == 0));
+
+		always @(*)
+		if (|f_mspi)
+			assert(m_mod == NORMAL_SPI);
+
+		always @(*)
+		case(f_mspi[8:1])
+		8'h00: begin end
+		8'h01: assert(m_dat[0] == f_last_word[7]);
+		8'h02: assert(m_dat[0] == f_last_word[6]);
+		8'h04: assert(m_dat[0] == f_last_word[5]);
+		8'h08: assert(m_dat[0] == f_last_word[4]);
+		8'h10: assert(m_dat[0] == f_last_word[3]);
+		8'h20: assert(m_dat[0] == f_last_word[2]);
+		8'h40: assert(m_dat[0] == f_last_word[1]);
+		8'h80: assert(m_dat[0] == f_last_word[0]);
+		default: begin assert(0); end
+		endcase
+
+		always @(*)
+		if (|f_mdspi)
+			assert(m_mod == DUAL_WRITE || m_mod == DUAL_READ);
+
+		always @(*)
+		case(f_mdspi[4:1])
+		4'b0000: begin end
+		4'b0001: assert(m_dat[1:0] == f_last_word[7:6]);
+		4'b0010: assert(m_dat[1:0] == f_last_word[5:4]);
+		4'b0100: assert(m_dat[1:0] == f_last_word[3:2]);
+		4'b1000: assert(m_dat[1:0] == f_last_word[1:0]);
+		default: begin assert(0); end
+		endcase
 `endif
 	end else begin : NO_STARTUP_OPT
 
@@ -670,15 +750,20 @@ module	dualflexpress(i_clk, i_reset,
 			data_pipe[8+LGFLASHSZ-1:0] <= {
 					i_wb_addr, 2'b00, 4'ha, 4'h0 };
 
-			if (cfg_write)
+			if (i_cfg_stb)
+				// High speed configuration I/O
 				data_pipe[31:24] <= i_wb_data[7:0];
 
-			if ((cfg_write)&&(!i_wb_data[DSPEED_BIT]))
-			begin
+			if ((i_cfg_stb)&&(!i_wb_data[DSPEED_BIT]))
+			begin // Low speed configuration I/O
 				data_pipe[30] <= i_wb_data[7];
 				data_pipe[28] <= i_wb_data[6];
 				data_pipe[26] <= i_wb_data[5];
 				data_pipe[24] <= i_wb_data[4];
+			end
+
+			if (i_cfg_stb)
+			begin // These can be set independent of speed
 				data_pipe[22] <= i_wb_data[3];
 				data_pipe[20] <= i_wb_data[2];
 				data_pipe[18] <= i_wb_data[1];
@@ -738,8 +823,13 @@ module	dualflexpress(i_clk, i_reset,
 	if ((i_reset)||(maintenance))
 		clk_ctr <= 0;
 	else if ((bus_request)&&(!pipe_req))
+		// Notice that this is only for
+		// regular bus reads, and so the check for
+		// !pipe_req
 		clk_ctr <= 6'd12+6'd16+NDUMMY + (OPT_ODDR ? 0:1);
 	else if (bus_request) // && pipe_req
+		// Otherwise, if this is a piped read, we'll
+		// reset the counter back to eight.
 		clk_ctr <= 6'd16;
 	else if (cfg_ls_write)
 		clk_ctr <= 6'd8 + ((OPT_ODDR) ? 0:1);
@@ -2036,30 +2126,31 @@ module	dualflexpress(i_clk, i_reset,
 endmodule
 // Originally:			   (XPRS)		wbqspiflash
 //				(NOCFG)	(XPRS) (PIPE)  (R/O)	(FULL)
-//   Number of cells:           367	382	477	889	1248
-//     FDRE                     110	112     135	231	 281
-//     LUT1                      29	 28	 29	 23	  23
-//     LUT2                      36	 33	 50	 83	 203
-//     LUT3                      73	 62      60	 67	 166
-//     LUT4                       7	 10	 18	 29	  57
-//     LUT5                       3	 13	 16	 50	  95
-//     LUT6                      24	 38	 41	215	 256
-//     MUXCY                     52	 52	 73	 59	  59
-//     MUXF7                      9	 12	  9	 60	  31
-//     MUXF8                      3	  1	  3	  5	  10
-//     XORCY                     21	 21	 43	 67	  67
+//   Number of cells:           367	382	526	889	1248
+//     FDRE                     110	112     151	231	 281
+//     LUT1                      29	 28	 37	 23	  23
+//     LUT2                      36	 33	 36	 83	 203
+//     LUT3                      73	 62      69	 67	 166
+//     LUT4                       7	 10	 31	 29	  57
+//     LUT5                       3	 13	 34	 50	  95
+//     LUT6                      24	 38	 29	215	 256
+//     MUXCY                     52	 52	 74	 59	  59
+//     MUXF7                      9	 12	  5	 60	  31
+//     MUXF8                      3	  1	  2	  5	  10
+//     XORCY                     21	 21	 47	 67	  67
+//     RAM64X1D					 11
 //
 //
 // and on an iCE40
 //						wbqspiflash
 //			(NOCFG)	(XPRS)	(PIPED)
-// Number of cells:	181	215	303	1263
-//   SB_CARRY		 17	 17	 37	  41
+// Number of cells:	181	215	500	1263
+//   SB_CARRY		 17	 17	 62	  41
 //   SB_DFF		 25	 25	 26	   2
-//   SB_DFFE		 34	 31	 53	 180
-//   SB_DFFESR		  7	 12	 12	  80
-//   SB_DFFESS		  0	  0	  7	  15
-//   SB_DFFSR		  7	  7	  1	   1
+//   SB_DFFE		 34	 31	 84	 180
+//   SB_DFFESR		  7	 12	 24	  80
+//   SB_DFFESS		  0	  0	  1	  15
+//   SB_DFFSR		  7	  7	  8	   1
 //   SB_DFFSS		  1	  1	  1	   2
-//   SB_LUT4		 90	122	167	 942
+//   SB_LUT4		 90	122	294	 942
 // 

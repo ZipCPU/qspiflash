@@ -23,6 +23,9 @@
 //	3: Read ID (read only)
 //	(19 bits): Data (R/w, but expect writes to take a while)
 //		
+//	This core has been deprecated.  All of my new projects are using one of
+//	my universal flash controllers now: qflexpress, dualflexpress, or spixpress.
+//	These can be found in my https://github.com/ZipCPU/qspiflash repository.
 //
 // Creator:	Dan Gisselquist, Ph.D.
 //		Gisselquist Technology, LLC

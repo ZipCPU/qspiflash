@@ -59,6 +59,7 @@ LLQSPI := llqspi
 SPIX := spixpress
 DSPI := dualflexpress
 QSPI := qflexpress
+WB   := fwb_slave.v
 
 $(LLQSPI).smt2: $(RTL)/$(LLQSPI).v $(LLQSPI).ys
 	$(YOSYS) -ql $(LLQSPI).yslog -s $(LLQSPI).ys
@@ -74,17 +75,17 @@ $(LLQSPI).check: $(LLQSPI).smt2
 .PHONY: $(SPIX)
 $(SPIX) : $(SPIX)_safety/PASS $(SPIX)_safety_pipe/PASS $(SPIX)_safety_nocfg/PASS
 $(SPIX) : $(SPIX)_safety_pipe_nocfg/PASS $(SPIX)_cover/PASS $(SPIX)_cover_pipe/PASS
-$(SPIX)_safety/PASS:       $(SPIX).sby $(RTL)/$(SPIX).v
+$(SPIX)_safety/PASS:       $(SPIX).sby $(RTL)/$(SPIX).v $(WB)
 	sby -f $(SPIX).sby safety
-$(SPIX)_safety_pipe/PASS:  $(SPIX).sby $(RTL)/$(SPIX).v
+$(SPIX)_safety_pipe/PASS:  $(SPIX).sby $(RTL)/$(SPIX).v $(WB)
 	sby -f $(SPIX).sby safety_pipe
-$(SPIX)_safety_nocfg/PASS: $(SPIX).sby $(RTL)/$(SPIX).v
+$(SPIX)_safety_nocfg/PASS: $(SPIX).sby $(RTL)/$(SPIX).v $(WB)
 	sby -f $(SPIX).sby safety_nocfg
-$(SPIX)_safety_pipe_nocfg/PASS: $(SPIX).sby $(RTL)/$(SPIX).v
+$(SPIX)_safety_pipe_nocfg/PASS: $(SPIX).sby $(RTL)/$(SPIX).v $(WB)
 	sby -f $(SPIX).sby safety_pipe_nocfg
-$(SPIX)_cover/PASS: $(SPIX).sby $(RTL)/$(SPIX).v
+$(SPIX)_cover/PASS: $(SPIX).sby $(RTL)/$(SPIX).v $(WB)
 	sby -f $(SPIX).sby cover
-$(SPIX)_cover_pipe/PASS: $(SPIX).sby $(RTL)/$(SPIX).v
+$(SPIX)_cover_pipe/PASS: $(SPIX).sby $(RTL)/$(SPIX).v $(WB)
 	sby -f $(SPIX).sby cover_pipe
 
 .PHONY: $(DSPI)
@@ -96,51 +97,73 @@ $(DSPI) : $(DSPI)_ice40div/PASS  $(DSPI)_ice40divc/PASS  #$(DSPI)_ice40divs/PASS
 $(DSPI) : $(DSPI)_xilinxdiv/PASS $(DSPI)_xilinxdivc/PASS#$(DSPI)_xilinxdivs/PASS
 $(DSPI) : $(DSPI)_arrow/PASS     $(DSPI)_arrowc/PASS     $(DSPI)_arrows/PASS
 $(DSPI) : $(DSPI)_divthree/PASS  $(DSPI)_divfive/PASS
+$(DSPI) : $(DSPI)_x32/PASS       $(DSPI)_x32c/PASS       $(DSPI)_x32swap/PASS
+$(DSPI) : $(DSPI)_xilinxswap/PASS
+$(DSPI) : $(DSPI)_bareswap/PASS
+$(DSPI) : $(DSPI)_barepswap/PASS
+$(DSPI) : $(DSPI)_barecfgswp/PASS
+$(DSPI) : $(DSPI)_cfgonlyswp/PASS
 # $(DSPI)_divfives/PASS
-$(DSPI)_bare/PASS:      $(DSPI).sby $(RTL)/$(DSPI).v
+$(DSPI)_bare/PASS:      $(DSPI).sby $(RTL)/$(DSPI).v $(WB)
 	sby -f $(DSPI).sby bare
-$(DSPI)_barep/PASS:      $(DSPI).sby $(RTL)/$(DSPI).v
+$(DSPI)_barep/PASS:      $(DSPI).sby $(RTL)/$(DSPI).v $(WB)
 	sby -f $(DSPI).sby barep
-$(DSPI)_barecfg/PASS:    $(DSPI).sby $(RTL)/$(DSPI).v
+$(DSPI)_barecfg/PASS:    $(DSPI).sby $(RTL)/$(DSPI).v $(WB)
 	sby -f $(DSPI).sby barecfg
-$(DSPI)_cfgonly/PASS:    $(DSPI).sby $(RTL)/$(DSPI).v
+$(DSPI)_cfgonly/PASS:    $(DSPI).sby $(RTL)/$(DSPI).v $(WB)
 	sby -f $(DSPI).sby cfgonly
-$(DSPI)_ice40/PASS:      $(DSPI).sby $(RTL)/$(DSPI).v
+$(DSPI)_ice40/PASS:      $(DSPI).sby $(RTL)/$(DSPI).v $(WB)
 	sby -f $(DSPI).sby ice40
-$(DSPI)_ice40c/PASS:     $(DSPI).sby $(RTL)/$(DSPI).v
+$(DSPI)_ice40c/PASS:     $(DSPI).sby $(RTL)/$(DSPI).v $(WB)
 	sby -f $(DSPI).sby ice40c
-$(DSPI)_ice40s/PASS:     $(DSPI).sby $(RTL)/$(DSPI).v
+$(DSPI)_ice40s/PASS:     $(DSPI).sby $(RTL)/$(DSPI).v $(WB)
 	sby -f $(DSPI).sby ice40s
-$(DSPI)_xilinx/PASS:     $(DSPI).sby $(RTL)/$(DSPI).v
+$(DSPI)_xilinx/PASS:     $(DSPI).sby $(RTL)/$(DSPI).v $(WB)
 	sby -f $(DSPI).sby xilinx
-$(DSPI)_xilinxc/PASS:    $(DSPI).sby $(RTL)/$(DSPI).v
+$(DSPI)_xilinxc/PASS:    $(DSPI).sby $(RTL)/$(DSPI).v $(WB)
 	sby -f $(DSPI).sby xilinxc
-$(DSPI)_xilinxs/PASS:    $(DSPI).sby $(RTL)/$(DSPI).v
+$(DSPI)_xilinxs/PASS:    $(DSPI).sby $(RTL)/$(DSPI).v $(WB)
 	sby -f $(DSPI).sby xilinxs
-$(DSPI)_ice40div/PASS:  $(DSPI).sby $(RTL)/$(DSPI).v
+$(DSPI)_ice40div/PASS:  $(DSPI).sby $(RTL)/$(DSPI).v $(WB)
 	sby -f $(DSPI).sby ice40div
-$(DSPI)_ice40divc/PASS: $(DSPI).sby $(RTL)/$(DSPI).v
+$(DSPI)_ice40divc/PASS: $(DSPI).sby $(RTL)/$(DSPI).v $(WB)
 	sby -f $(DSPI).sby ice40divc
-$(DSPI)_ice40divs/PASS: $(DSPI).sby $(RTL)/$(DSPI).v
+$(DSPI)_ice40divs/PASS: $(DSPI).sby $(RTL)/$(DSPI).v $(WB)
 	sby -f $(DSPI).sby ice40divs
-$(DSPI)_xilinxdiv/PASS:  $(DSPI).sby $(RTL)/$(DSPI).v
+$(DSPI)_xilinxdiv/PASS:  $(DSPI).sby $(RTL)/$(DSPI).v $(WB)
 	sby -f $(DSPI).sby xilinxdiv
-$(DSPI)_xilinxdivc/PASS: $(DSPI).sby $(RTL)/$(DSPI).v
+$(DSPI)_xilinxdivc/PASS: $(DSPI).sby $(RTL)/$(DSPI).v $(WB)
 	sby -f $(DSPI).sby xilinxdivc
-$(DSPI)_xilinxdivs/PASS: $(DSPI).sby $(RTL)/$(DSPI).v
+$(DSPI)_xilinxdivs/PASS: $(DSPI).sby $(RTL)/$(DSPI).v $(WB)
 	sby -f $(DSPI).sby xilinxdivs
-$(DSPI)_divthree/PASS:   $(DSPI).sby $(RTL)/$(DSPI).v
+$(DSPI)_divthree/PASS:   $(DSPI).sby $(RTL)/$(DSPI).v $(WB)
 	sby -f $(DSPI).sby divthree
-$(DSPI)_divfive/PASS:    $(DSPI).sby $(RTL)/$(DSPI).v
+$(DSPI)_divfive/PASS:    $(DSPI).sby $(RTL)/$(DSPI).v $(WB)
 	sby -f $(DSPI).sby divfive
-$(DSPI)_divfives/PASS:   $(DSPI).sby $(RTL)/$(DSPI).v
+$(DSPI)_divfives/PASS:   $(DSPI).sby $(RTL)/$(DSPI).v $(WB)
 	sby -f $(DSPI).sby divfives
-$(DSPI)_arrow/PASS:   $(DSPI).sby $(RTL)/$(DSPI).v
+$(DSPI)_arrow/PASS:   $(DSPI).sby $(RTL)/$(DSPI).v $(WB)
 	sby -f $(DSPI).sby arrow
-$(DSPI)_arrowc/PASS:   $(DSPI).sby $(RTL)/$(DSPI).v
+$(DSPI)_arrowc/PASS:   $(DSPI).sby $(RTL)/$(DSPI).v $(WB)
 	sby -f $(DSPI).sby arrowc
-$(DSPI)_arrows/PASS:   $(DSPI).sby $(RTL)/$(DSPI).v
+$(DSPI)_arrows/PASS:   $(DSPI).sby $(RTL)/$(DSPI).v $(WB)
 	sby -f $(DSPI).sby arrows
+$(DSPI)_x32/PASS:        $(DSPI).sby $(RTL)/$(DSPI).v $(WB)
+	sby -f $(DSPI).sby x32
+$(DSPI)_x32c/PASS:       $(DSPI).sby $(RTL)/$(DSPI).v $(WB)
+	sby -f $(DSPI).sby x32c
+$(DSPI)_x32swap/PASS:    $(DSPI).sby $(RTL)/$(DSPI).v $(WB)
+	sby -f $(DSPI).sby x32swap
+$(DSPI)_xilinxswap/PASS: $(DSPI).sby $(RTL)/$(DSPI).v $(WB)
+	sby -f $(DSPI).sby xilinxswap
+$(DSPI)_bareswap/PASS:   $(DSPI).sby $(RTL)/$(DSPI).v $(WB)
+	sby -f $(DSPI).sby bareswap
+$(DSPI)_barepswap/PASS:  $(DSPI).sby $(RTL)/$(DSPI).v $(WB)
+	sby -f $(DSPI).sby barepswap
+$(DSPI)_barecfgswp/PASS: $(DSPI).sby $(RTL)/$(DSPI).v $(WB)
+	sby -f $(DSPI).sby barecfgswp
+$(DSPI)_cfgonlyswp/PASS: $(DSPI).sby $(RTL)/$(DSPI).v $(WB)
+	sby -f $(DSPI).sby cfgonlyswp
 
 .PHONY: $(QSPI)
 $(QSPI) : $(QSPI)_bare/PASS      $(QSPI)_barep/PASS      $(QSPI)_barecfg/PASS
@@ -150,6 +173,11 @@ $(QSPI) : $(QSPI)_xilinx/PASS    $(QSPI)_xilinxc/PASS    $(QSPI)_xilinxs/PASS
 $(QSPI) : $(QSPI)_ice40div/PASS  $(QSPI)_ice40divc/PASS  $(QSPI)_ice40divs/PASS
 $(QSPI) : $(QSPI)_xilinxdiv/PASS $(QSPI)_xilinxdivc/PASS $(QSPI)_xilinxdivs/PASS
 $(QSPI) : $(QSPI)_divthree/PASS  $(QSPI)_divfive/PASS    $(QSPI)_divfives/PASS
+$(QSPI) : $(QSPI)_bareswap/PASS  $(QSPI)_barepswap/PASS
+$(QSPI) : $(QSPI)_barecfgswp/PASS $(QSPI)_cfgonlyswp/PASS
+$(QSPI) : $(QSPI)_xilinxswap/PASS $(QSPI)_xilinxdvsw/PASS
+$(QSPI) : $(QSPI)_divthrswp/PASS  $(QSPI)_x32/PASS
+$(QSPI) : $(QSPI)_x32c/PASS       $(QSPI)_x32swap/PASS
 $(QSPI)_bare/PASS:      $(QSPI).sby $(RTL)/$(QSPI).v
 	sby -f $(QSPI).sby bare
 $(QSPI)_barep/PASS:      $(QSPI).sby $(RTL)/$(QSPI).v
@@ -188,9 +216,29 @@ $(QSPI)_divfive/PASS:    $(QSPI).sby $(RTL)/$(QSPI).v
 	sby -f $(QSPI).sby divfive
 $(QSPI)_divfives/PASS:   $(QSPI).sby $(RTL)/$(QSPI).v
 	sby -f $(QSPI).sby divfives
+$(QSPI)_bareswap/PASS:   $(QSPI).sby $(RTL)/$(QSPI).v
+	sby -f $(QSPI).sby bareswap
+$(QSPI)_barepswap/PASS:  $(QSPI).sby $(RTL)/$(QSPI).v
+	sby -f $(QSPI).sby barepswap
+$(QSPI)_barecfgswp/PASS: $(QSPI).sby $(RTL)/$(QSPI).v
+	sby -f $(QSPI).sby barecfgswp
+$(QSPI)_cfgonlyswp/PASS: $(QSPI).sby $(RTL)/$(QSPI).v
+	sby -f $(QSPI).sby cfgonlyswp
+$(QSPI)_divthrswp/PASS:  $(QSPI).sby $(RTL)/$(QSPI).v
+	sby -f $(QSPI).sby divthrswp
+$(QSPI)_xilinxswap/PASS: $(QSPI).sby $(RTL)/$(QSPI).v
+	sby -f $(QSPI).sby xilinxswap
+$(QSPI)_xilinxdvsw/PASS: $(QSPI).sby $(RTL)/$(QSPI).v
+	sby -f $(QSPI).sby xilinxdvsw
+$(QSPI)_x32/PASS:        $(QSPI).sby $(RTL)/$(QSPI).v
+	sby -f $(QSPI).sby x32
+$(QSPI)_x32c/PASS:       $(QSPI).sby $(RTL)/$(QSPI).v
+	sby -f $(QSPI).sby x32c
+$(QSPI)_x32swap/PASS:    $(QSPI).sby $(RTL)/$(QSPI).v
+	sby -f $(QSPI).sby x32swap
 
 
 .PHONY: clean
 clean:
-	rm $(LLQSPI).smt2 $(LLQSPI) *.vcd $(LLQSPI).yslog
-	rm $(SPIX)_*/ $(DSPI)_*/ $(QSPI)_*/
+	rm -f $(LLQSPI).smt2 $(LLQSPI) *.vcd $(LLQSPI).yslog
+	rm -rf $(SPIX)_*/ $(DSPI)_*/ $(QSPI)_*/

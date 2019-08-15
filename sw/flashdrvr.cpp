@@ -50,6 +50,7 @@
 #include <assert.h>
 
 #include "port.h"
+#include "design.h"
 #include "regdefs.h"
 #include "ttybus.h"
 #include "flashdrvr.h"
@@ -58,6 +59,8 @@
 #ifndef	FLASH_UNKNOWN
 #define	FLASH_UNKNOWN	0
 #endif
+
+#define	MICRON_FLASHID	0x20ba1810
 
 #define	CFG_USERMODE	(1<<12)
 #ifdef	QSPI_FLASH
@@ -85,8 +88,8 @@ static const unsigned	F_RESET = (CFG_USERMODE|0x0ff),
 
 const	bool	HIGH_SPEED = false;
 
-#ifdef	R_QSCOPE // Scope for the eqspi flash driver
-# define SETSCOPE m_fpga->writeio(R_QSCOPE, 8180)
+#ifdef	R_FLASHSCOPE // Scope for the flash driver
+# define SETSCOPE m_fpga->writeio(R_FLASHSCOPE, 8180)
 #else
 # define SETSCOPE
 #endif
@@ -101,22 +104,27 @@ unsigned FLASHDRVR::flashid(void) {
 #elif	!defined(R_FLASHCFG)
 	return FLASH_UNKNOWN;
 #else
+	unsigned	r;
 	if (m_id != FLASH_UNKNOWN)
 		return m_id;
 
+// printf("Getting ID\n");
 	take_offline();
 
 	m_fpga->writeio(R_FLASHCFG, CFG_USERMODE | 0x9f);
 	m_fpga->writeio(R_FLASHCFG, CFG_USERMODE | 0x00);
-	r = readio(R_FLASHCFG) & 0x0ff;
+	r = m_fpga->readio(R_FLASHCFG) & 0x0ff;
 	m_fpga->writeio(R_FLASHCFG, CFG_USERMODE | 0x00);
-	r = (r<<8) | (readio(R_FLASHCFG) & 0x0ff);
+	r = (r<<8) | (m_fpga->readio(R_FLASHCFG) & 0x0ff);
 	m_fpga->writeio(R_FLASHCFG, CFG_USERMODE | 0x00);
-	r = (r<<8) | (readio(R_FLASHCFG) & 0x0ff);
+	r = (r<<8) | (m_fpga->readio(R_FLASHCFG) & 0x0ff);
 	m_fpga->writeio(R_FLASHCFG, CFG_USERMODE | 0x00);
-	r = (r<<8) | (readio(R_FLASHCFG) & 0x0ff);
+	r = (r<<8) | (m_fpga->readio(R_FLASHCFG) & 0x0ff);
+	m_id = r;
 	place_online();
 
+
+// printf("flash ID returning %08x\n", m_id);
 	return m_id;
 #endif
 }
@@ -132,6 +140,10 @@ void	FLASHDRVR::place_online(void) {
 void	FLASHDRVR::take_offline(DEVBUS *fpga) {
 #ifdef	R_FLASHCFG
 	fpga->writeio(R_FLASHCFG, F_END);
+	fpga->writeio(R_FLASHCFG, F_RESET);
+	fpga->writeio(R_FLASHCFG, F_RESET);
+	fpga->writeio(R_FLASHCFG, F_RESET);
+	fpga->writeio(R_FLASHCFG, F_RESET);
 	fpga->writeio(R_FLASHCFG, F_RESET);
 	fpga->writeio(R_FLASHCFG, F_RESET);
 	fpga->writeio(R_FLASHCFG, F_END);
@@ -153,6 +165,7 @@ void	FLASHDRVR::restore_dualio(void) {
 }
 
 void	FLASHDRVR::restore_dualio(DEVBUS *fpga) {
+	// static const	uint32_t	DUAL_IO_READ     = CFG_USERMODE|0xbb;
 #ifdef	DSPI_FLASH
 #error "This controller doesn't (yet) support Dual-mode"
 #endif
@@ -164,8 +177,24 @@ void	FLASHDRVR::restore_quadio(void) {
 
 void	FLASHDRVR::restore_quadio(DEVBUS *fpga) {
 #ifdef	QSPI_FLASH
-	//static const	uint32_t	DUAL_IO_READ     = CFG_USERMODE|0xbb;
 	static	const	uint32_t	QUAD_IO_READ     = CFG_USERMODE|0xeb;
+
+	fpga->writeio(R_FLASHCFG, F_END);
+	/*
+	if (MICRON_FLASHID == m_id) {
+		// printf("MICRON-flash\n");
+		// Need to enable XIP first for MICRON's flash
+		//
+		// This requires sending a write enable first
+		fpga->writeio(R_FLASHCFG, F_WREN);
+		fpga->writeio(R_FLASHCFG, F_END);
+
+		// Then sending a 0xab, 0x81
+		fpga->writeio(R_FLASHCFG, CFG_USERMODE | 0x81);
+		fpga->writeio(R_FLASHCFG, CFG_USERMODE | 0xf3);
+		fpga->writeio(R_FLASHCFG, F_END);
+	}
+	*/
 
 	fpga->writeio(R_FLASHCFG, QUAD_IO_READ);
 	// 3 address bytes
@@ -174,16 +203,21 @@ void	FLASHDRVR::restore_quadio(DEVBUS *fpga) {
 	fpga->writeio(R_FLASHCFG, CFG_USERMODE | CFG_QSPEED | CFG_WEDIR);
 	// Mode byte
 	fpga->writeio(R_FLASHCFG, CFG_USERMODE | CFG_QSPEED | CFG_WEDIR | 0xa0);
+	// Read NDUMMY clocks worth
+#ifdef	FLASH_NDUMMY
+	for(int k=0; k<(FLASH_NDUMMY-2)/2; k++)
+		fpga->writeio(R_FLASHCFG, CFG_USERMODE | CFG_QSPEED );
+#endif
 	// Read a dummy byte
 	fpga->writeio(R_FLASHCFG, CFG_USERMODE | CFG_QSPEED );
 	// Close the interface
 	fpga->writeio(R_FLASHCFG, CFG_USERMODE);
+	fpga->writeio(R_FLASHCFG, CFG_USER_CS_n);
 #endif
 }
 
 void	FLASHDRVR::flwait(void) {
 #ifdef	FLASH_ACCESS
-#ifndef	EQSPIFLASH_ACCESS
 	const	int	WIP = 1;	// Write in progress bit
 	DEVBUS::BUSW	sr;
 
@@ -194,38 +228,11 @@ void	FLASHDRVR::flwait(void) {
 		sr = m_fpga->readio(R_FLASHCFG);
 	} while(sr&WIP);
 	m_fpga->writeio(R_FLASHCFG, F_END);
-#else // EQSPIFLASH_ACCESS
-	DEVBUS::BUSW	v;
-
-	v = m_fpga->readio(R_QSPI_EREG);
-	if ((v&ERASEFLAG)==0)
-		return;
-	m_fpga->writeio(R_ICONTROL, ISPIF_DIS);
-	m_fpga->clear();
-	m_fpga->writeio(R_ICONTROL, ISPIF_EN);
-
-	do {
-		// Start by checking that we are still erasing.  The interrupt
-		// may have been generated while we were setting things up and
-		// disabling things, so this just double checks for us.  If
-		// the interrupt was tripped, we're done.  If not, we can now
-		// wait for an interrupt.
-		v = m_fpga->readio(R_QSPI_EREG);
-		if (v&ERASEFLAG) {
-			m_fpga->usleep(400);
-			if (m_fpga->poll()) {
-				m_fpga->clear();
-				m_fpga->writeio(R_ICONTROL, ISPIF_EN);
-			}
-		}
-	} while(v & ERASEFLAG);
-#endif
 #endif
 }
 
 bool	FLASHDRVR::erase_sector(const unsigned sector, const bool verify_erase) {
 #ifdef	FLASH_ACCESS
-#ifndef	EQSPIFLASH_ACCESS
 	unsigned	flashaddr = sector & 0x0ffffff;
 
 	take_offline();
@@ -241,24 +248,10 @@ bool	FLASHDRVR::erase_sector(const unsigned sector, const bool verify_erase) {
 	printf("Erasing sector: %06x\n", flashaddr);
 
 	m_fpga->writeio(R_FLASHCFG, F_SE);
-	m_fpga->writeio(R_FLASHCFG, (flashaddr>>16)&0x0ff);
-	m_fpga->writeio(R_FLASHCFG, (flashaddr>> 8)&0x0ff);
-	m_fpga->writeio(R_FLASHCFG, (flashaddr    )&0x0ff);
+	m_fpga->writeio(R_FLASHCFG, CFG_USERMODE | ((flashaddr>>16)&0x0ff));
+	m_fpga->writeio(R_FLASHCFG, CFG_USERMODE | ((flashaddr>> 8)&0x0ff));
+	m_fpga->writeio(R_FLASHCFG, CFG_USERMODE | ((flashaddr    )&0x0ff));
 	m_fpga->writeio(R_FLASHCFG, F_END);
-#else	// EQSPIFLASH_ACCESS
-	DEVBUS::BUSW	page[SZPAGEW];
-
-	if (m_debug) printf("EREG before   : %08x\n", m_fpga->readio(R_QSPI_EREG));
-	if (m_debug) printf("Erasing sector: %08x\n", sector);
-	m_fpga->writeio(R_QSPI_EREG, DISABLEWP);
-	if (m_debug) printf("EREG with WEL : %08x\n", m_fpga->readio(R_QSPI_EREG));
-	SETSCOPE;
-	m_fpga->writeio(R_QSPI_EREG, ERASEFLAG + (sector>>2));
-	if (m_debug) printf("EREG after    : %08x\n", m_fpga->readio(R_QSPI_EREG));
-
-
-	}
-#endif
 
 	// Wait for the erase to complete
 	flwait();
@@ -271,7 +264,7 @@ bool	FLASHDRVR::erase_sector(const unsigned sector, const bool verify_erase) {
 		if (m_debug)
 			printf("Verifying the erase\n");
 		for(int i=0; i<NPAGES; i++) {
-			printf("READI[%08x + %04x]\n", R_FLASH+flashaddr+i*SZPAGEB, SZPAGEW);
+			// printf("READI[%08x + %04x]\n", R_FLASH+flashaddr+i*SZPAGEB, SZPAGEW);
 			m_fpga->readi(R_FLASH+flashaddr+i*SZPAGEB, SZPAGEW, page);
 			for(int j=0; j<SZPAGEW; j++)
 				if (page[j] != 0xffffffff) {
@@ -300,9 +293,7 @@ bool	FLASHDRVR::page_program(const unsigned addr, const unsigned len,
 	DEVBUS::BUSW	buf[SZPAGEW], bswapd[SZPAGEW];
 	unsigned	flashaddr = addr & 0x0ffffff;
 
-#ifndef	EQSPIFLASH_ACCESS
 	take_offline();
-#endif
 
 	assert(len > 0);
 	assert(len <= PGLENB);
@@ -331,7 +322,11 @@ bool	FLASHDRVR::page_program(const unsigned addr, const unsigned len,
 		// Write the page
 		//
 
-		// Issue the command
+		// Issue the page program command
+		//
+		// Our interface will limit us, so there's no reason to use
+		// QUAD page programming here
+		// if (F_QPP) {} else
 		m_fpga->writeio(R_FLASHCFG, F_PP);
 		// The address
 		m_fpga->writeio(R_FLASHCFG, CFG_USERMODE|((flashaddr>>16)&0x0ff));
@@ -341,8 +336,7 @@ bool	FLASHDRVR::page_program(const unsigned addr, const unsigned len,
 		// Write the page data itself
 		for(unsigned i=0; i<len; i++)
 			m_fpga->writeio(R_FLASHCFG, 
-				CFG_USERMODE | CFG_QSPEED | CFG_WEDIR
-				| (data[i] & 0x0ff));
+				CFG_USERMODE | CFG_WEDIR | (data[i] & 0x0ff));
 		m_fpga->writeio(R_FLASHCFG, F_END);
 #else
 		// Write the page
@@ -400,7 +394,7 @@ bool	FLASHDRVR::page_program(const unsigned addr, const unsigned len,
 bool	FLASHDRVR::verify_config(void) {
 #ifndef	FLASH_ACCESS
 	return false;
-#elif	!define(R_QSPI_VCONF)
+#elif	!defined(R_QSPI_VCONF)
 	return true;
 #else
 

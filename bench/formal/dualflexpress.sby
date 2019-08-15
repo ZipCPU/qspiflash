@@ -1,11 +1,16 @@
 [tasks]
-xilinx  prf optpipe optcfg optstartup
-xilinxc cvr optpipe optcfg
-xilinxs cvr optpipe optcfg optstartup
+xilinx      prf optpipe optcfg optstartup
+xilinxswap  prf optpipe optcfg optstartup optswap
+xilinxc     cvr optpipe optcfg
+xilinxs     cvr optpipe optcfg optstartup
 bare    prf
 barep   prf optpipe
 barecfg prf optpipe optcfg
 cfgonly prf optcfg
+bareswap    prf optswap
+barepswap   prf optpipe optswap
+barecfgswp  prf optpipe optcfg optswap
+cfgonlyswp  prf optcfg optswap
 ice40   prf optpipe optcfg optstartup
 ice40c  cvr optpipe optcfg
 ice40s  cvr optpipe optcfg optstartup
@@ -18,9 +23,12 @@ xilinxdivc  xilinx cvr optpipe optcfg divone
 divthree  prf optpipe optcfg
 divfive   prf optpipe optcfg
 # divfives  cvr optpipe optcfg optstartup
-arrow     prf optpipe optcfg optstartup
-arrowc    cvr optpipe optcfg
-arrows    cvr optpipe optcfg optstartup
+arrow     prf arrow optpipe optcfg optstartup
+arrowc    cvr arrow optpipe optcfg
+arrows    cvr arrow optpipe optcfg optstartup
+x32     prf xilinx optpipe optcfg optstartup optaddr32
+x32c    cvr xilinx optpipe optcfg            optaddr32
+x32swap prf xilinx optpipe optcfg optstartup optaddr32 optswap
 
 [options]
 prf: mode prove
@@ -35,6 +43,8 @@ ice40div:   depth  80
 ice40s:     depth 120
 xilinxs:    depth 120
 arrows:     depth 250
+optaddr32:  depth 43
+x32c:       depth 150
 # ice40divs:  depth 250
 # xilinxdivs: depth 250
 # divfives:   depth 610
@@ -45,25 +55,29 @@ smtbmc boolector
 [script]
 read -formal -DDUALFLEXPRESS fwb_slave.v
 read -formal -DDUALFLEXPRESS dualflexpress.v
-xilinx:      chparam -set RDDELAY     3 dualflexpress
-ice40:       chparam -set RDDELAY     0 dualflexpress
-optpipe:     chparam -set OPT_PIPE    1 dualflexpress
-~optpipe:    chparam -set OPT_PIPE    0 dualflexpress
-optcfg:      chparam -set OPT_CFG     1 dualflexpress
-~optcfg:     chparam -set OPT_CFG     0 dualflexpress
-
-divone:      chparam -set OPT_CLKDIV  1 dualflexpress
-divthree:    chparam -set OPT_CLKDIV  3 dualflexpress
-divfive:     chparam -set OPT_CLKDIV  5 dualflexpress
-# divfives:    chparam -set OPT_CLKDIV  5 dualflexpress
-
-optstartup:  chparam -set OPT_STARTUP 1 dualflexpress
-~optstartup: chparam -set OPT_STARTUP 0 dualflexpress
-
-arrow:       chparam -set RDDELAY     2 -set NDUMMY 4 dualflexpress
-arrowc:      chparam -set RDDELAY     2 -set NDUMMY 4 dualflexpress
-arrows:      chparam -set RDDELAY     2 -set NDUMMY 4 dualflexpress
-
+--pycode-begin--
+cmd = "hierarchy -top dualflexpress"
+cmd += " -chparam OPT_PIPE %d" % (1 if "optpipe" in tags else 0)
+cmd += " -chparam OPT_CFG  %d" % (1 if "optcfg"  in tags else 0)
+cmd += " -chparam OPT_ENDIANSWAP %d" % (1 if "optswap" in tags else 0)
+if ("xilinx" in tags):
+	cmd += " -chparam RDDELAY 3 -chparam NDUMMY 6"
+elif ("arrow" in tags):
+	cmd += " -chparam RDDELAY 2 -chparam NDUMMY 4"
+else:
+	cmd += " -chparam RDDELAY 0 -chparam NDUMMY 8"
+if ("divone" in tags):
+	cmd += " -chparam OPT_CLKDIV 1"
+elif ("divthree" in tags):
+	cmd += " -chparam OPT_CLKDIV 3"
+elif ("divfive" in tags):
+	cmd += " -chparam OPT_CLKDIV 5"
+elif ("divfives" in tags):
+	cmd += " -chparam OPT_CLKDIV 5"
+cmd += " -chparam OPT_STARTUP %d" % (1  if "optstartup" in tags else 0)
+cmd += " -chparam LGFLASHSZ   %d" % (32 if "optaddr32"  in tags else 24)
+output(cmd)
+--pycode-end--
 prep -top dualflexpress
 
 [files]

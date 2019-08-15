@@ -2,8 +2,13 @@
 bare       prf
 barep      prf optpipe
 barecfg    prf optpipe optcfg
+bareswap   prf                optswap
+barepswap  prf optpipe        optswap
+barecfgswp prf optpipe optcfg optswap
 cfgonly    prf         optcfg
+cfgonlyswp prf         optcfg optswap
 divthree   prf optpipe optcfg
+divthrswp  prf optpipe optcfg optswap
 divfive    prf optpipe optcfg
 divfives   cvr optpipe optcfg optstartup
 ice40      prf optpipe optcfg optstartup
@@ -12,12 +17,17 @@ ice40s     cvr optpipe optcfg optstartup
 ice40div   prf optpipe optcfg optstartup divone
 ice40divc  cvr optpipe optcfg            divone
 ice40divs  cvr optpipe optcfg optstartup divone
-xilinx     prf optpipe optcfg optstartup
-xilinxc    cvr optpipe optcfg
-xilinxs    cvr optpipe optcfg optstartup
-xilinxdiv  prf optpipe optcfg            divone xilinx
-xilinxdivc cvr optpipe optcfg            divone xilinx
-xilinxdivs cvr optpipe optcfg optstartup divone xilinx
+xilinx     prf xilinx optpipe optcfg optstartup
+xilinxswap prf xilinx optpipe optcfg optstartup optswap
+xilinxc    cvr xilinx optpipe optcfg
+xilinxs    cvr xilinx optpipe optcfg optstartup
+xilinxdiv  prf xilinx optpipe optcfg            divone
+xilinxdvsw prf xilinx optpipe optcfg            divone optswap
+xilinxdivc cvr xilinx optpipe optcfg            divone
+xilinxdivs cvr xilinx optpipe optcfg optstartup divone
+x32        prf xilinx optpipe optcfg optstartup optaddr32
+x32c       cvr xilinx optpipe optcfg optaddr32
+x32swap    prf xilinx optpipe optcfg optaddr32 optswap
 
 [options]
 prf: mode prove
@@ -34,6 +44,8 @@ ice40divs:  depth 250
 xilinxdivc: depth  80
 xilinxdivs: depth 250
 divfives:   depth 610
+x32:  depth 26
+x32c: depth 44
 
 [engines]
 smtbmc boolector
@@ -41,22 +53,27 @@ smtbmc boolector
 [script]
 read -formal -DQFLEXPRESS fwb_slave.v
 read -formal -DQFLEXPRESS qflexpress.v
-xilinx:      chparam -set RDDELAY     3 qflexpress
-ice40:       chparam -set RDDELAY     0 qflexpress
-optpipe:     chparam -set OPT_PIPE    1 qflexpress
-~optpipe:    chparam -set OPT_PIPE    0 qflexpress
-optcfg:      chparam -set OPT_CFG     1 qflexpress
-~optcfg:     chparam -set OPT_CFG     0 qflexpress
-
-divone:      chparam -set OPT_CLKDIV  1 qflexpress
-divthree:    chparam -set OPT_CLKDIV  3 qflexpress
-divfive:     chparam -set OPT_CLKDIV  5 qflexpress
-divfives:    chparam -set OPT_CLKDIV  5 qflexpress
-
-optstartup:  chparam -set OPT_STARTUP 1 qflexpress
-~optstartup: chparam -set OPT_STARTUP 0 qflexpress
+--pycode-begin--
+cmd = "hierarchy -top qflexpress"
+cmd += " -chparam RDDELAY  %d" % (3 if "xilinx"  in tags else 0)
+cmd += " -chparam OPT_PIPE %d" % (1 if "optpipe" in tags else 0)
+cmd += " -chparam OPT_CFG  %d" % (1 if "optcfg"  in tags else 0)
+cmd += " -chparam OPT_ENDIANSWAP %d" % (1 if "optswap" in tags else 0)
+if ("divone" in tags):
+	cmd += " -chparam OPT_CLKDIV 1"
+elif ("divthree" in tags):
+	cmd += " -chparam OPT_CLKDIV 3"
+elif ("divfive" in tags):
+	cmd += " -chparam OPT_CLKDIV 5"
+elif ("divfives" in tags):
+	cmd += " -chparam OPT_CLKDIV 5"
+cmd += " -chparam OPT_STARTUP %d" % (1  if "optstartup" in tags else 0)
+cmd += " -chparam LGFLASHSZ   %d" % (32 if "optaddr32"  in tags else 24)
+output(cmd)
+--pycode-end--
 
 prep -top qflexpress
+dump
 
 [files]
 fwb_slave.v

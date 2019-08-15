@@ -72,9 +72,8 @@ module	dualflexpress(i_clk, i_reset,
 
 	//
 	// LGFLASHSZ is the size of the flash memory.  It defines the number
-	// of bits in the address register and more.  This controller will only
-	// support flashes with 24-bit or less addresses--it doesn't support
-	// the 32-bit address flash chips.
+	// of bits in the address register and more.  This controller will support
+	// flash sizes up to 2^LGFLASHSZ, where LGFLASHSZ goes up to 32.
 	parameter	LGFLASHSZ=24;
 	//
 	// OPT_PIPE makes it possible to string multiple requests together,
@@ -91,7 +90,21 @@ module	dualflexpress(i_clk, i_reset,
 	// OPT_STARTUP enables the startup logic
 	parameter [0:0]	OPT_STARTUP = 1'b1;
 	//
+	// OPT_ADDR32 enables 32 bit addressing, rather than 24bit
+	// Control this by controlling the LGFLASHSZ parameter above.  Anything
+	// greater than 24 will use 32-bit addressing, otherwise the regular
+	// 24-bit addressing
+	localparam [0:0]	OPT_ADDR32 = (LGFLASHSZ > 24);
+	//
 	parameter	OPT_CLKDIV = 0;
+	//
+	// Normally, I place the first byte read from the flash, and the lowest
+	// flash address, into bits [7:0], and then shift it up--to where upon
+	// return it is found in bits [31:24].  This is ideal for a big endian
+	// systems, not so much for little endian systems.  The endian swap
+	// allows the bus to swap the return values in order to support little
+	// endian systems.
+	parameter [0:0]	OPT_ENDIANSWAP = 1'b1;
 	//
 	// OPT_ODDR will be true any time the clock has no clock division
 	localparam [0:0]	OPT_ODDR = (OPT_CLKDIV == 0);
@@ -109,7 +122,7 @@ module	dualflexpress(i_clk, i_reset,
 				: ((OPT_CLKDIV < 256) ? 8 : 9))))))));
 	//
 	// RDDELAY is the number of clock cycles from when o_dspi_dat is valid
-	// until i_dspi_dat is valid.  Read delays from 0-4 have been verified
+	// until i_dspi_dat is valid.  Read delays from 0-4 have been verified.
 	// DDR Registered I/O on a Xilinx device can be done with a RDDELAY=3
 	// On Intel/Altera devices, RDDELAY=2 works
 	// I'm using RDDELAY=0 for my iCE40 devices
@@ -147,7 +160,7 @@ module	dualflexpress(i_clk, i_reset,
 	localparam	DW=32;
 	//
 `ifdef	FORMAL
-	localparam	F_LGDEPTH=$clog2(3+RDDELAY);
+	localparam	F_LGDEPTH=$clog2(12+16+1+NDUMMY+RDDELAY+(OPT_ADDR32 ? 4:0));
 	reg	f_past_valid;
 `endif
 	//
@@ -173,6 +186,7 @@ module	dualflexpress(i_clk, i_reset,
 	reg		dly_ack, read_sck, xtra_stall;
 	// clk_ctr must have enough bits for ...
 	//	12		address clocks, 2-bits each
+	//	 4		extra address clocks, for 32bit addressing
 	//	NDUMMY		dummy clocks, including two mode bytes
 	//	16		data clocks
 	//	(RDDELAY clocks not counted here)
@@ -201,7 +215,13 @@ module	dualflexpress(i_clk, i_reset,
 	assign	cfg_ls_write = (cfg_write)&&(!i_wb_data[DSPEED_BIT]);
 
 
-	reg	ckstb, ckpos, ckneg, ckpre;
+	reg		ckstb, ckpos, ckneg, ckpre;
+	reg		maintenance;
+	reg	[1:0]	m_mod;
+	reg		m_cs_n;
+	reg		m_clk;
+	reg	[1:0]	m_dat;
+
 
 	generate if (OPT_ODDR)
 	begin
@@ -286,12 +306,6 @@ module	dualflexpress(i_clk, i_reset,
 	// Maintenance / startup portion
 	//
 	//
-	reg		maintenance;
-	reg	[1:0]	m_mod;
-	reg		m_cs_n;
-	reg		m_clk;
-	reg	[1:0]	m_dat;
-
 	generate if (OPT_STARTUP)
 	begin : GEN_STARTUP
 		localparam	M_WAITBIT=10;
@@ -397,7 +411,7 @@ module	dualflexpress(i_clk, i_reset,
 
 		//
 		initial	maintenance = 1'b1;
-		initial	m_cmd_index = 0;
+		initial	m_cmd_index = M_FIRSTIDX;
 		always @(posedge i_clk)
 		if (i_reset)
 		begin
@@ -478,9 +492,9 @@ module	dualflexpress(i_clk, i_reset,
 				m_bitcount <= 0;
 			end else begin
 				m_cs_n <= 1'b0;
-				m_mod  <= m_this_word[9:8];
+				m_mod  <= m_this_word[M_WAITBIT-1:M_WAITBIT-2];
 				m_bitcount <= (!OPT_ODDR && m_cs_n) ? 4'h4 : 4'h3;
-				if (!m_this_word[9])
+				if (!m_this_word[M_WAITBIT-1])
 					m_bitcount <= (!OPT_ODDR && m_cs_n) ? 4'h8 : 4'h7;//i.e.7
 			end
 		end
@@ -730,7 +744,7 @@ module	dualflexpress(i_clk, i_reset,
 	end endgenerate
 
 
-	reg	[32+2*(OPT_ODDR ? 0:1)-1:0]	data_pipe;
+	reg	[32+(OPT_ADDR32 ? 8:0)+2*(OPT_ODDR ? 0:1)-1:0]	data_pipe;
 	reg	pre_ack = 1'b0;
 	reg	actual_sck;
 
@@ -752,31 +766,31 @@ module	dualflexpress(i_clk, i_reset,
 
 			if (i_cfg_stb)
 				// High speed configuration I/O
-				data_pipe[31:24] <= i_wb_data[7:0];
+				data_pipe[24+(OPT_ADDR32 ? 8:0) +: 8] <= i_wb_data[7:0];
 
 			if ((i_cfg_stb)&&(!i_wb_data[DSPEED_BIT]))
 			begin // Low speed configuration I/O
-				data_pipe[30] <= i_wb_data[7];
-				data_pipe[28] <= i_wb_data[6];
-				data_pipe[26] <= i_wb_data[5];
-				data_pipe[24] <= i_wb_data[4];
+				data_pipe[30+(OPT_ADDR32 ? 8:0)]<= i_wb_data[7];
+				data_pipe[28+(OPT_ADDR32 ? 8:0)]<= i_wb_data[6];
+				data_pipe[26+(OPT_ADDR32 ? 8:0)]<= i_wb_data[5];
+				data_pipe[24+(OPT_ADDR32 ? 8:0)]<= i_wb_data[4];
 			end
 
 			if (i_cfg_stb)
 			begin // These can be set independent of speed
-				data_pipe[22] <= i_wb_data[3];
-				data_pipe[20] <= i_wb_data[2];
-				data_pipe[18] <= i_wb_data[1];
-				data_pipe[16] <= i_wb_data[0];
+				data_pipe[22+(OPT_ADDR32 ? 8:0)] <= i_wb_data[3];
+				data_pipe[20+(OPT_ADDR32 ? 8:0)] <= i_wb_data[2];
+				data_pipe[18+(OPT_ADDR32 ? 8:0)] <= i_wb_data[1];
+				data_pipe[16+(OPT_ADDR32 ? 8:0)] <= i_wb_data[0];
 			end
 		end else if (ckstb)
-			data_pipe <= { data_pipe[(32+2*((OPT_ODDR ? 0:1)-1))-1:0], 2'h0 };
+			data_pipe <= { data_pipe[(32+(OPT_ADDR32 ? 8:0)+2*((OPT_ODDR ? 0:1)-1))-1:0], 2'h0 };
 
 		if (maintenance)
-			data_pipe[30+2*(OPT_ODDR ? 0:1) +: 2] <= m_dat;
+			data_pipe[30+(OPT_ADDR32 ? 8:0)+2*(OPT_ODDR ? 0:1) +: 2] <= m_dat;
 	end
 
-	assign	o_dspi_dat = data_pipe[30+2*(OPT_ODDR ? 0:1) +: 2];
+	assign	o_dspi_dat = data_pipe[30+(OPT_ADDR32 ? 8:0)+2*(OPT_ODDR ? 0:1) +: 2];
 
 	// Since we can't abort any transaction once started, without
 	// risking losing XIP mode or any other mode we might be in, we'll
@@ -826,7 +840,7 @@ module	dualflexpress(i_clk, i_reset,
 		// Notice that this is only for
 		// regular bus reads, and so the check for
 		// !pipe_req
-		clk_ctr <= 6'd12+6'd16+NDUMMY + (OPT_ODDR ? 0:1);
+		clk_ctr <= 6'd12+6'd16+NDUMMY + (OPT_ADDR32 ? 4:0)+(OPT_ODDR ? 0:1);
 	else if (bus_request) // && pipe_req
 		// Otherwise, if this is a piped read, we'll
 		// reset the counter back to eight.
@@ -855,8 +869,6 @@ module	dualflexpress(i_clk, i_reset,
 			o_dspi_sck <= 1'b0;
 		else if (clk_ctr[5:0] > 6'd1)
 			o_dspi_sck <= 1'b1;
-		else if ((clk_ctr[5:0] == 6'd2)&&(pipe_req))
-			o_dspi_sck <= 1'b1;
 		else
 			o_dspi_sck <= 1'b0;
 	end else if (((ckpos)&&(!o_dspi_sck))||(o_dspi_cs_n))
@@ -868,8 +880,6 @@ module	dualflexpress(i_clk, i_reset,
 			// Config mode has no pipe instructions
 			o_dspi_sck <= 1'b1;
 		else if (clk_ctr[5:0] > 6'd1)
-			o_dspi_sck <= 1'b0;
-		else if ((clk_ctr[5:0] == 6'd2)&&(pipe_req))
 			o_dspi_sck <= 1'b0;
 		else
 			o_dspi_sck <= 1'b1;
@@ -996,26 +1006,53 @@ module	dualflexpress(i_clk, i_reset,
 	begin : RDDELAY_NONZERO
 
 		reg	[RDDELAY-1:0]	sck_pipe, ack_pipe, stall_pipe;
+		reg	not_done;
 
 		initial	sck_pipe = 0;
-		always @(posedge i_clk)
-		if (i_reset)
-			sck_pipe <= 0;
-		else if (RDDELAY > 1)
-			sck_pipe <= { sck_pipe[RDDELAY-2:0], actual_sck };
-		else // if (RDDELAY == 1)
-			sck_pipe[0] <= actual_sck;
-
 		initial	ack_pipe = 0;
-		always @(posedge i_clk)
-		if (i_reset || !i_wb_cyc)
-			ack_pipe <= 0;
-		else if (RDDELAY > 1)
-			ack_pipe <= { ack_pipe[RDDELAY-2:0], dly_ack };
-		else
-			ack_pipe[0] <= dly_ack;
+		initial	stall_pipe = -1;
+		if (RDDELAY > 1)
+		begin
+			always @(posedge i_clk)
+			if (i_reset)
+				sck_pipe <= 0;
+			else
+				sck_pipe <= { sck_pipe[RDDELAY-2:0], actual_sck };
 
-		reg	not_done;
+			always @(posedge i_clk)
+			if (i_reset || !i_wb_cyc)
+				ack_pipe <= 0;
+			else
+				ack_pipe <= { ack_pipe[RDDELAY-2:0], dly_ack };
+
+			always @(posedge i_clk)
+			if (i_reset)
+				stall_pipe <= -1;
+			else
+				stall_pipe <= { stall_pipe[RDDELAY-2:0], not_done };
+
+
+		end else // if (RDDELAY > 0)
+		begin
+			always @(posedge i_clk)
+			if (i_reset)
+				sck_pipe <= 0;
+			else
+				sck_pipe <= actual_sck;
+
+			always @(posedge i_clk)
+			if (i_reset || !i_wb_cyc)
+				ack_pipe <= 0;
+			else
+				ack_pipe <= dly_ack;
+
+			always @(posedge i_clk)
+			if (i_reset)
+				stall_pipe <= -1;
+			else
+				stall_pipe <= not_done;
+		end
+
 		always @(*)
 		begin
 			not_done = (i_wb_stb || i_cfg_stb) && !o_wb_stall;
@@ -1024,15 +1061,6 @@ module	dualflexpress(i_clk, i_reset,
 			if ((clk_ctr == 1)&&(!ckstb))
 				not_done = 1'b1;
 		end
-
-		initial	stall_pipe = -1;
-		always @(posedge i_clk)
-		if (i_reset)
-			stall_pipe <= -1;
-		else if (RDDELAY > 1)
-			stall_pipe <= { stall_pipe[RDDELAY-2:0], not_done };
-		else
-			stall_pipe[0] <= not_done;
 
 		always @(*)
 			o_wb_ack = ack_pipe[RDDELAY-1];
@@ -1061,7 +1089,22 @@ module	dualflexpress(i_clk, i_reset,
 	begin
 		if (read_sck)
 		begin
-			if (!o_dspi_mod[1])
+			if (OPT_ENDIANSWAP && !cfg_mode)
+			begin
+				if (!o_dspi_mod[1])
+				begin
+					o_wb_data <= { o_wb_data[30:24], i_dspi_dat[1],
+						o_wb_data[22:16], o_wb_data[31],
+						o_wb_data[14:8], o_wb_data[23],
+						o_wb_data[6:0], o_wb_data[15] };
+				end else begin
+					o_wb_data <= { o_wb_data[29:24], i_dspi_dat,
+						o_wb_data[21:16], o_wb_data[31:30],
+						o_wb_data[13:8], o_wb_data[23:22],
+						o_wb_data[5:0], o_wb_data[15:14]};
+				end
+			end else if (!o_dspi_mod[1])
+				// No endian-swapping
 				o_wb_data <= { o_wb_data[30:0], i_dspi_dat[1] };
 			else
 				o_wb_data <= { o_wb_data[29:0], i_dspi_dat };
@@ -1127,7 +1170,7 @@ module	dualflexpress(i_clk, i_reset,
 	// verilator lint_on  UNUSED
 
 `ifdef	FORMAL
-	localparam	F_MEMDONE   = NDUMMY+12+16+(OPT_ODDR ? 0:1);
+	localparam	F_MEMDONE   = NDUMMY+12+16+(OPT_ADDR32 ? 4:0)+(OPT_ODDR ? 0:1);
 	localparam	F_MEMACK    = F_MEMDONE + RDDELAY;
 	localparam	F_PIPEDONE  = 16;
 	localparam	F_PIPEACK   = F_PIPEDONE + RDDELAY;
@@ -1135,13 +1178,22 @@ module	dualflexpress(i_clk, i_reset,
 	localparam	F_CFGLSACK  = F_CFGLSDONE + RDDELAY;
 	localparam	F_CFGHSDONE = 4+(OPT_ODDR ? 0:1);
 	localparam	F_CFGHSACK  = RDDELAY+F_CFGHSDONE;
-	localparam	F_ACKCOUNT = (29+NDUMMY+RDDELAY)
+	localparam	F_ACKCOUNT = (12+16+1+NDUMMY+RDDELAY+(OPT_ADDR32 ? 4:0))
 				*(OPT_ODDR ? 1 : (OPT_CLKDIV+1));
 	genvar	k;
 
 	wire	[(F_LGDEPTH-1):0]	f_nreqs, f_nacks,
 					f_outstanding;
 	reg	[(AW-1):0]	f_req_addr;
+	reg	[(OPT_ADDR32 ? 29:21):0]	fv_addr;
+	reg	[31:0]	fv_data;
+	reg	[F_MEMACK:0] f_memread;
+	reg	[32:0]	f_past_data;
+	reg	[F_PIPEACK:0]	f_piperead;
+	reg	[F_CFGHSACK:0]	f_cfghsread;
+	reg	[F_CFGHSACK:0]	f_cfghswrite;
+	reg	[F_CFGLSACK:0]	f_cfglswrite;
+
 //
 //
 // Generic setup
@@ -1223,8 +1275,14 @@ module	dualflexpress(i_clk, i_reset,
 	else if ((!OPT_ODDR)&&((o_dspi_sck)||(!$past(o_dspi_sck))))
 		assume($stable(dly_idat));
 
-	always @(posedge i_clk)
-		assume(i_dspi_dat == $past(dly_idat,RDDELAY));
+	generate if (RDDELAY > 0)
+	begin
+		always @(posedge i_clk)
+			assume(i_dspi_dat == $past(dly_idat,RDDELAY));
+	end else begin
+		always @(*)
+			assume(i_dspi_dat == dly_idat);
+	end endgenerate
 	//
 	////////////////////////////////////////////////////////////////////////
 	//
@@ -1342,13 +1400,16 @@ module	dualflexpress(i_clk, i_reset,
 			assert(clk_ctr == 6'd16);
 			assert(o_dspi_mod == DUAL_READ);
 		end else begin
-			assert(clk_ctr == 6'd28 + NDUMMY + (OPT_ODDR ? 0:1));
+			assert(clk_ctr == 6'd28 + NDUMMY
+				+ (OPT_ADDR32 ? 4:0) + (OPT_ODDR ? 0:1));
 			assert(o_dspi_mod == DUAL_WRITE);
 		end
 	end
 
 	always @(*)
-		assert(clk_ctr <= 5'd28 + NDUMMY + (OPT_ODDR ? 0:1));
+		assert(clk_ctr <= 6'd32 + NDUMMY
+			+ (OPT_ADDR32 ? 4:0)
+			+ (OPT_ODDR ? 0:1));
 
 	always @(*)
 	if ((OPT_ODDR)&&(!o_dspi_cs_n))
@@ -1401,7 +1462,6 @@ module	dualflexpress(i_clk, i_reset,
 	//
 	//
 	//
-	reg	[21:0]	fv_addr;
 	always @(posedge i_clk)
 	if (bus_request)
 	begin
@@ -1411,13 +1471,11 @@ module	dualflexpress(i_clk, i_reset,
 		fv_addr[AW-1:0] <= i_wb_addr;
 	end
 
-	reg	[31:0]	fv_data;
 	always @(posedge i_clk)
 	if ((i_wb_stb || i_cfg_stb) && !o_wb_stall && i_wb_we)
 		fv_data <= i_wb_data;
 
 	// Memory reads
-	reg	[F_MEMACK:0] f_memread;
 
 	initial	f_memread = 0;
 	generate if (RDDELAY == 0)
@@ -1457,60 +1515,101 @@ module	dualflexpress(i_clk, i_reset,
 	always @(posedge i_clk)
 	if (|f_memread[F_MEMDONE-16-NDUMMY+4-1:0])
 		assert(o_dspi_mod == DUAL_WRITE);
-	else if (|f_memread[F_MEMDONE-16-1:F_MEMDONE-16-NDUMMY+4])
-	// begin assert(1); end
-	begin end
-	else if (|f_memread)
+	// else if (|f_memread[F_MEMDONE-16-1:F_MEMDONE-16-NDUMMY+4])
+	// begin end
+	else if (|f_memread[F_MEMACK:F_MEMDONE-16])
 		assert(o_dspi_mod == DUAL_READ);
 
-	reg	[32:0]	f_past_data;
-	always @(posedge i_clk)
-	if ($past(ckpos,RDDELAY))
+	generate if (RDDELAY > 0)
 	begin
-		if ($past(o_dspi_mod,RDDELAY) == NORMAL_SPI)
-			f_past_data <= { f_past_data[31:0], i_dspi_dat[1] };
-		else if ($past(o_dspi_mod,RDDELAY) == DUAL_READ)
-			f_past_data <= { f_past_data[30:0], i_dspi_dat[1:0] };
-	end
+
+		always @(posedge i_clk)
+		if ($past(ckpos,RDDELAY))
+		begin
+			if ($past(o_dspi_mod,RDDELAY) == NORMAL_SPI)
+				f_past_data <= { f_past_data[31:0], i_dspi_dat[1] };
+			else if ($past(o_dspi_mod,RDDELAY) == DUAL_READ)
+				f_past_data <= { f_past_data[30:0], i_dspi_dat[1:0] };
+		end
+	end else begin
+		always @(posedge i_clk)
+		if (ckpos)
+		begin
+			if (o_dspi_mod == NORMAL_SPI)
+				f_past_data <= { f_past_data[31:0], i_dspi_dat[1] };
+			else if (o_dspi_mod == DUAL_READ)
+				f_past_data <= { f_past_data[30:0], i_dspi_dat[1:0] };
+		end
+	end endgenerate
 
 	always @(posedge i_clk)
-	if (|f_memread[(OPT_ODDR ? 0:1) +: 7])
+	if (|f_memread[(OPT_ODDR ? 0:1) +: 7 + (OPT_ADDR32 ? 4:0)])
 	begin
+		if (OPT_ADDR32)
+		begin
+			// Eight extra bits of address
+			if (f_memread[(OPT_ODDR ? 0:1)])
+				assert(o_dspi_dat== fv_addr[29:28]);
+			if (f_memread[1 + (OPT_ODDR ? 0:1)])
+				assert(o_dspi_dat== fv_addr[27:26]);
+			if (f_memread[2 + (OPT_ODDR ? 0:1)])
+				assert(o_dspi_dat== fv_addr[25:24]);
+			if (f_memread[3 + (OPT_ODDR ? 0:1)])
+				assert(o_dspi_dat== fv_addr[23:22]);
+		end
 		// 12 dibits of address, two dibits of mode
-		if (f_memread[(OPT_ODDR ? 0:1)])
+		if (f_memread[(OPT_ODDR ? 0:1)+(OPT_ADDR32 ? 4:0)])
 			assert(o_dspi_dat== fv_addr[21:20]);
-		if (f_memread[1+(OPT_ODDR ? 0:1)])
+		if (f_memread[1+(OPT_ODDR ? 0:1)+(OPT_ADDR32 ? 4:0)])
 			assert(o_dspi_dat== fv_addr[19:18]);
-		if (f_memread[2+(OPT_ODDR ? 0:1)])
+		if (f_memread[2+(OPT_ODDR ? 0:1)+(OPT_ADDR32 ? 4:0)])
 			assert(o_dspi_dat== fv_addr[17:16]);
-		if (f_memread[3+(OPT_ODDR ? 0:1)])
+		if (f_memread[3+(OPT_ODDR ? 0:1)+(OPT_ADDR32 ? 4:0)])
 			assert(o_dspi_dat== fv_addr[15:14]);
-		if (f_memread[4+(OPT_ODDR ? 0:1)])
+		if (f_memread[4+(OPT_ODDR ? 0:1)+(OPT_ADDR32 ? 4:0)])
 			assert(o_dspi_dat== fv_addr[13:12]);
-		if (f_memread[5+(OPT_ODDR ? 0:1)])
+		if (f_memread[5+(OPT_ODDR ? 0:1)+(OPT_ADDR32 ? 4:0)])
 			assert(o_dspi_dat== fv_addr[11:10]);
-		if (f_memread[6+(OPT_ODDR ? 0:1)])
+		if (f_memread[6+(OPT_ODDR ? 0:1)+(OPT_ADDR32 ? 4:0)])
 			assert(o_dspi_dat== fv_addr[ 9: 8]);
-		if (f_memread[7+(OPT_ODDR ? 0:1)])
+		if (f_memread[7+(OPT_ODDR ? 0:1)+(OPT_ADDR32 ? 4:0)])
 			assert(o_dspi_dat== fv_addr[ 7: 6]);
-		if (f_memread[8+(OPT_ODDR ? 0:1)])
+		if (f_memread[8+(OPT_ODDR ? 0:1)+(OPT_ADDR32 ? 4:0)])
 			assert(o_dspi_dat== fv_addr[ 5: 4]);
-		if (f_memread[9+(OPT_ODDR ? 0:1)])
+		if (f_memread[9+(OPT_ODDR ? 0:1)+(OPT_ADDR32 ? 4:0)])
 			assert(o_dspi_dat== fv_addr[ 3: 2]);
-		if (f_memread[10+(OPT_ODDR ? 0:1)])
+		if (f_memread[10+(OPT_ODDR ? 0:1)+(OPT_ADDR32 ? 4:0)])
 			assert(o_dspi_dat== fv_addr[ 1: 0]);
-		if (f_memread[11+(OPT_ODDR ? 0:1)])
+		if (f_memread[11+(OPT_ODDR ? 0:1)+(OPT_ADDR32 ? 4:0)])
 			assert(o_dspi_dat== 2'b00);
-		if (f_memread[12+(OPT_ODDR ? 0:1)])
+		if (f_memread[12+(OPT_ODDR ? 0:1+(OPT_ADDR32 ? 4:0))])
 			assert(o_dspi_dat == 2'b10);
-		if (f_memread[13+(OPT_ODDR ? 0:1)])
+		if (f_memread[13+(OPT_ODDR ? 0:1)+(OPT_ADDR32 ? 4:0)])
 			assert(o_dspi_dat == 2'b10);
 	end
 
 	always @(posedge i_clk)
 	if (OPT_ODDR)
 	begin
-		if (f_memread[F_MEMACK])
+		if (f_memread[F_MEMACK] && OPT_ENDIANSWAP)
+		begin
+			assert(o_wb_data[ 7: 6] == $past(i_dspi_dat,16));
+			assert(o_wb_data[ 5: 4] == $past(i_dspi_dat,15));
+			assert(o_wb_data[ 3: 2] == $past(i_dspi_dat,14));
+			assert(o_wb_data[ 1: 0] == $past(i_dspi_dat,13));
+			assert(o_wb_data[15:14] == $past(i_dspi_dat,12));
+			assert(o_wb_data[13:12] == $past(i_dspi_dat,11));
+			assert(o_wb_data[11:10] == $past(i_dspi_dat,10));
+			assert(o_wb_data[ 9: 8] == $past(i_dspi_dat,9));
+			assert(o_wb_data[23:22] == $past(i_dspi_dat,8));
+			assert(o_wb_data[21:20] == $past(i_dspi_dat,7));
+			assert(o_wb_data[19:18] == $past(i_dspi_dat,6));
+			assert(o_wb_data[17:16] == $past(i_dspi_dat,5));
+			assert(o_wb_data[31:30] == $past(i_dspi_dat,4));
+			assert(o_wb_data[29:28] == $past(i_dspi_dat,3));
+			assert(o_wb_data[27:26] == $past(i_dspi_dat,2));
+			assert(o_wb_data[25:24] == $past(i_dspi_dat,1));
+		end else if (f_memread[F_MEMACK])
 		begin
 			assert(o_wb_data[31:30] == $past(i_dspi_dat,16));
 			assert(o_wb_data[29:28] == $past(i_dspi_dat,15));
@@ -1536,7 +1635,13 @@ module	dualflexpress(i_clk, i_reset,
 				assert(o_wb_stall);
 			assert(!o_wb_ack);
 		end
-	end else if (f_memread[F_MEMACK]) // 25
+	end else if (f_memread[F_MEMACK] && OPT_ENDIANSWAP)
+		assert((!o_wb_ack)||(
+			   o_wb_data[ 7: 0] == f_past_data[31:24]
+			&& o_wb_data[15: 8] == f_past_data[23:16]
+			&& o_wb_data[23:16] == f_past_data[15: 8]
+			&& o_wb_data[31:24] == f_past_data[ 7: 0]));
+	else if (f_memread[F_MEMACK]) // 25
 		assert((!o_wb_ack)||(o_wb_data == f_past_data[31:0]));
 	else if (|f_memread)
 	begin
@@ -1560,7 +1665,6 @@ module	dualflexpress(i_clk, i_reset,
 			assert((f_memread ^ (1<<k)) == 0);
 	end endgenerate
 
-	reg	[F_PIPEACK:0]	f_piperead;
 
 	generate if (RDDELAY == 0)
 	begin
@@ -1592,7 +1696,25 @@ module	dualflexpress(i_clk, i_reset,
 	always @(posedge  i_clk)
 	if (OPT_ODDR)
 	begin
-		if (f_piperead[F_PIPEACK])
+		if (f_piperead[F_PIPEACK] && OPT_ENDIANSWAP)
+		begin
+			assert(o_wb_data[ 7: 6] == $past(i_dspi_dat,16));
+			assert(o_wb_data[ 5: 4] == $past(i_dspi_dat,15));
+			assert(o_wb_data[ 3: 2] == $past(i_dspi_dat,14));
+			assert(o_wb_data[ 1: 0] == $past(i_dspi_dat,13));
+			assert(o_wb_data[15:14] == $past(i_dspi_dat,12));
+			assert(o_wb_data[13:12] == $past(i_dspi_dat,11));
+			assert(o_wb_data[11:10] == $past(i_dspi_dat,10));
+			assert(o_wb_data[ 9: 8] == $past(i_dspi_dat,9));
+			assert(o_wb_data[23:22] == $past(i_dspi_dat,8));
+			assert(o_wb_data[21:20] == $past(i_dspi_dat,7));
+			assert(o_wb_data[19:18] == $past(i_dspi_dat,6));
+			assert(o_wb_data[17:16] == $past(i_dspi_dat,5));
+			assert(o_wb_data[31:30] == $past(i_dspi_dat,4));
+			assert(o_wb_data[29:28] == $past(i_dspi_dat,3));
+			assert(o_wb_data[27:26] == $past(i_dspi_dat,2));
+			assert(o_wb_data[25:24] == $past(i_dspi_dat,1));
+		end else if (f_piperead[F_PIPEACK])
 		begin
 			assert(o_wb_data[31:30] == $past(i_dspi_dat,16));
 			assert(o_wb_data[29:28] == $past(i_dspi_dat,15));
@@ -1612,6 +1734,13 @@ module	dualflexpress(i_clk, i_reset,
 			assert(o_wb_data[ 1: 0] == $past(i_dspi_dat, 1));
 		end else if ((|f_piperead)&&(!f_piperead[RDDELAY]))
 			assert(!o_wb_ack);
+	end else if (f_piperead[F_PIPEACK] && OPT_ENDIANSWAP)
+	begin
+		assert((!o_wb_ack)||(
+			   o_wb_data[ 7: 0] == f_past_data[31:24]
+			&& o_wb_data[15: 8] == f_past_data[23:16]
+			&& o_wb_data[23:16] == f_past_data[15: 8]
+			&& o_wb_data[31:24] == f_past_data[ 7: 0]));
 	end else if (f_piperead[F_PIPEACK]) // 25
 		assert((!o_wb_ack)||(o_wb_data == f_past_data[31:0]));
 	else if (|f_piperead)
@@ -1646,8 +1775,6 @@ module	dualflexpress(i_clk, i_reset,
 	//
 	// Lowspeed config write
 	//
-	reg	[F_CFGLSACK:0]	f_cfglswrite;
-
 	initial	f_cfglswrite = 0;
 	always @(posedge i_clk)
 	if (i_reset)
@@ -1750,8 +1877,6 @@ module	dualflexpress(i_clk, i_reset,
 	//
 	// High speed config write
 	//
-	reg	[F_CFGHSACK:0]	f_cfghswrite;
-
 	generate if (RDDELAY == 0)
 	begin
 		initial	f_cfghswrite = 0;
@@ -1868,8 +1993,6 @@ module	dualflexpress(i_clk, i_reset,
 	//
 	// High speed config read
 	//
-	reg	[F_CFGHSACK:0]	f_cfghsread;
-
 	initial	f_cfghsread = 0;
 	always @(posedge i_clk)
 	if (i_reset)

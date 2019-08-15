@@ -23,12 +23,13 @@ smtbmc
 [script]
 read -formal fwb_slave.v
 read -formal spixpress.v
-cover:		chparam -set F_OPT_COVER 1 spixpress
-cover_pipe:	chparam -set F_OPT_COVER 1 spixpress
-nopipe:		chparam -set OPT_PIPE   0 spixpress
-pipe:		chparam -set OPT_PIPE   1 spixpress
-wconfig:	chparam -set OPT_CFG    1 spixpress
-noconfig:	chparam -set OPT_CFG    0 spixpress
+--pycode-begin--
+cmd = "hierarchy -top spixpress"
+cmd += " -chparam F_OPT_COVER %d" % (1 if "cover" in tags else (1 if "cover_pipe" in tags else 0))
+cmd += " -chparam OPT_PIPE %d" % (1 if "pipe"    in tags else 0)
+cmd += " -chparam OPT_CFG  %d" % (1 if "wconfig" in tags else 0)
+output(cmd)
+--pycode-end--
 prep -top spixpress
 
 [files]

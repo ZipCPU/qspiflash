@@ -205,14 +205,18 @@ module	spixpress(i_clk, i_reset,
 	// Outgoing WB-Data
 	//
 	always @(posedge i_clk)
-	if (actual_sck)
 	begin
+		if (actual_sck)
+		begin
+			if (cfg_user_mode)
+				o_wb_data <= { 19'h0, 1'b1, 4'h0, o_wb_data[6:0], i_spi_miso };
+			else
+				o_wb_data <= { o_wb_data[30:0], i_spi_miso };
+		end
+
 		if (cfg_user_mode)
-			o_wb_data <= { 19'h0, 1'b1, 4'h0, o_wb_data[6:0], i_spi_miso };
-		else
-			o_wb_data <= { o_wb_data[30:0], i_spi_miso };
-	end else if (cfg_user_mode)
-		o_wb_data <= { 19'h0, 1'b1, 4'h0, o_wb_data[7:0] };
+			o_wb_data[31:8] <= { 19'h0, 1'b1, 4'h0 };
+	end
 
 	//
 	// CSN
@@ -304,10 +308,12 @@ module	spixpress(i_clk, i_reset,
 	//
 	////////
 
-	initial	assume(i_reset);
 	always @(*)
 	if (!f_past_valid)
 		assume(i_reset);
+`ifndef	VERIFIC
+	initial	assume(i_reset);
+`endif
 
 	always @(posedge i_clk)
 	if ((!f_past_valid)||($past(i_reset)))
@@ -633,7 +639,12 @@ module	spixpress(i_clk, i_reset,
 			disable iff ((i_reset)||(!i_wb_cyc))
 			((i_cfg_stb)&&(!o_wb_stall)&&(i_wb_we)&&(!i_wb_data[8]))
 			##2 DATA_BYTE(f_data[7:0])
-			|=> (o_wb_ack)&&(o_wb_data == { 24'h0, f_data[7:0] })
+			|=> (o_wb_ack)&&(o_wb_data == { 24'h10,
+				$past(i_spi_miso,8), $past(i_spi_miso,7),
+				$past(i_spi_miso,6), $past(i_spi_miso,5),
+				$past(i_spi_miso,4), $past(i_spi_miso,3),
+				$past(i_spi_miso,2), $past(i_spi_miso,1)
+				})
 				&&(cfg_user_mode)&&(!o_wb_stall));
 
 		// Then it needs to stay constant until another SPI
@@ -641,7 +652,7 @@ module	spixpress(i_clk, i_reset,
 		assert property (@(posedge i_clk)
 			disable iff (i_reset)
 			($past(!o_spi_sck))&&(!o_spi_sck)&&(cfg_user_mode)
-			|=> $stable(o_wb_data)&&(o_wb_data[31:8]==0));
+			|=> $stable(o_wb_data)&&(o_wb_data[31:8]==5'h10));
 
 	end endgenerate
 `endif

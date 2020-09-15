@@ -31,9 +31,9 @@ x32c    cvr xilinx optpipe optcfg            optaddr32
 x32swap prf xilinx optpipe optcfg optstartup optaddr32 optswap
 #
 # Special proofs, defined for bench mark testing only
-xilinxdivbmc bmc xilinx optpipe optcfg divone
-divfivebmc   bmc optpipe optcfg
-divthreebmc  bmc optpipe optcfg
+xilinxdivbmc bmc xilinxdiv xilinx optpipe optcfg divone
+divfivebmc   bmc optpipe optcfg divfive
+divthreebmc  bmc optpipe optcfg divthree
 
 [options]
 prf: mode prove
@@ -58,6 +58,7 @@ x32c:       depth 150
 
 [engines]
 smtbmc boolector
+smtbmc yices
 
 [script]
 read -formal -DDUALFLEXPRESS fwb_slave.v

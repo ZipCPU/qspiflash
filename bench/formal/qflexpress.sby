@@ -28,10 +28,15 @@ xilinxdivs cvr xilinx optpipe optcfg optstartup divone
 x32        prf xilinx optpipe optcfg optstartup optaddr32
 x32c       cvr xilinx optpipe optcfg optaddr32
 x32swap    prf xilinx optpipe optcfg optaddr32 optswap
+#
+# Special proofs, defined for bench mark testing only
+divfivebmc bmc optpipe optcfg
 
 [options]
 prf: mode prove
 prf: depth 34
+bmc: mode bmc
+bmc: depth 34
 cvr: mode cover
 cvr: depth 40
 divone:     depth  60
@@ -46,6 +51,7 @@ xilinxdivs: depth 250
 divfives:   depth 610
 x32:  depth 26
 x32c: depth 44
+divfivebmc: depth 155
 
 [engines]
 smtbmc boolector

@@ -29,10 +29,17 @@ arrows    cvr arrow optpipe optcfg optstartup
 x32     prf xilinx optpipe optcfg optstartup optaddr32
 x32c    cvr xilinx optpipe optcfg            optaddr32
 x32swap prf xilinx optpipe optcfg optstartup optaddr32 optswap
+#
+# Special proofs, defined for bench mark testing only
+xilinxdivbmc bmc xilinx optpipe optcfg divone
+divfivebmc   bmc optpipe optcfg
+divthreebmc  bmc optpipe optcfg
 
 [options]
 prf: mode prove
 prf: depth 40
+bmc: mode bmc
+bmc: depth 40
 cvr: mode cover
 cvr: depth 145
 divone:     depth 120

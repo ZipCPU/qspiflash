@@ -1,7 +1,7 @@
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %%
 %% Filename: 	spec.tex
-%%
+%% {{{
 %% Project:	Wishbone Controlled Quad SPI Flash Controller
 %%
 %% Purpose:	This LaTeX file contains all of the documentation/description
@@ -17,9 +17,9 @@
 %%		Gisselquist Technology, LLC
 %%
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-%%
-%% Copyright (C) 2015,2018, Gisselquist Technology, LLC
-%%
+%% }}}
+%% Copyright (C) 2015-2021, Gisselquist Technology, LLC
+%% {{{
 %% This file is part of the set of Wishbone controlled SPI flash controllers
 %% project
 %%
@@ -37,12 +37,13 @@
 %% along with this program.  (It's in the $(ROOT)/doc directory.  Run make
 %% with no target there if the PDF file isn't present.)  If not, see
 %% <http://www.gnu.org/licenses/> for a copy.
-%%
+%% }}}
 %% License:	LGPL, v3, as defined and found on www.gnu.org,
+%% {{{
 %%		http://www.gnu.org/licenses/lgpl.html
 %%
-%%
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%% }}}
 \documentclass{gqtekspec}
 \project{Quad SPI Flash Controller}
 \title{Specification}
@@ -251,9 +252,9 @@ be read), followed by a one on the {\tt MOSI} channel when the mode byte would
 have taken place.  Then, when the CS line is later deactivated,
 the device will be out of any XIP mode and ready for commands.
 
-fpga->writeio(R\_FLASHCFG, F\_RESET);
-fpga->writeio(R\_FLASHCFG, F\_RESET);
-fpga->writeio(R\_FLASHCFG, F\_END);
+{\tt fpga->writeio(R\_FLASHCFG, F\_RESET); }
+{\tt fpga->writeio(R\_FLASHCFG, F\_RESET); }
+{\tt fpga->writeio(R\_FLASHCFG, F\_END); }
 
 The device is now ready to accept any command the underlying SPI device
 supports.
@@ -261,47 +262,47 @@ supports.
 For example, if we wish to issue a READID command (8'h9f), we could simply
 write
 
-m_fpga->writeio(R\_FLASHCFG, CFG_USERMODE | 0x9f); // a 16'h109f
+{\tt m\_fpga->writeio(R\_FLASHCFG, CFG\_USERMODE | 0x9f); // a 16'h109f}
 
 This will send the READID command to the device.  To read the command back,
 we'll need to clock the device and read one byte at a time.  The following
 therefore will read eight bits: one write request to clock the interface,
 followed by a second read request to get the data returned from the interface.
 
-m_fpga->writeio(R\_FLASHCFG, CFG_USERMODE | 0); // a 16'h1000
-r = m_fpga->readio(R\_FLASHCFG);
+{\tt m\_fpga->writeio(R\_FLASHCFG, CFG\_USERMODE | 0); // a 16'h1000}
+{\tt r = m\_fpga->readio(R\_FLASHCFG);}
 
 The software flash driver will read and pack three more bytes before returning.
 
 Finally, to return the device to normal operation, we'll neeed to issue a
 highspeed read command.  The following shows a Quad I/O read command.
 
-fpga->writeio(R_FLASHCFG, QUAD_IO_READ);
+{\tt fpga->writeio(R\_FLASHCFG, QUAD\_IO\_READ); }
 
 This is followed  by three (dummy) address bytes.
 
-// 3 address bytes
-fpga->writeio(R_FLASHCFG, CFG_USERMODE | CFG_QSPEED | CFG_WEDIR);
-fpga->writeio(R_FLASHCFG, CFG_USERMODE | CFG_QSPEED | CFG_WEDIR);
-fpga->writeio(R_FLASHCFG, CFG_USERMODE | CFG_QSPEED | CFG_WEDIR);
+{\tt // 3 address bytes }
+{\tt fpga->writeio(R\_FLASHCFG, CFG\_USERMODE | CFG\_QSPEED | CFG\_WEDIR); }
+{\tt fpga->writeio(R\_FLASHCFG, CFG\_USERMODE | CFG\_QSPEED | CFG\_WEDIR); }
+{\tt fpga->writeio(R\_FLASHCFG, CFG\_USERMODE | CFG\_QSPEED | CFG\_WEDIR); }
 
 A mode byte, 8'ha0, is required to place the device into XIP mode upon
 completion.
 
 // Mode byte
-fpga->writeio(R_FLASHCFG, CFG_USERMODE | CFG_QSPEED | CFG_WEDIR | 0xa0);
+{\tt fpga->writeio(R\_FLASHCFG, CFG\_USERMODE | CFG\_QSPEED | CFG\_WEDIR | 0xa0);}
 
 At this point, we need to change direction from write to read.
 Most interfaces require a dummy byte before the read command actually begins.
 
-// Read a dummy byte
-fpga->writeio(R_FLASHCFG, CFG_USERMODE | CFG_QSPEED );
+{\tt // Read a dummy byte }
+{\tt fpga->writeio(R\_FLASHCFG, CFG\_USERMODE | CFG\_QSPEED ); }
 
 Were we to continue, we'd be reading from the flash.  Instead, let's end
 our command.
 
-// Close the interface
-fpga->writeio(R_FLASHCFG, 0);
+{\tt // Close the interface }
+{\tt fpga->writeio(R\_FLASHCFG, 0); }
 
 \section{External Software Control}
 
@@ -418,7 +419,7 @@ is set, then the quad controller is implemented within the design.  Sadly,
 this method will not work with the SPI controller simply because commands with
 bit 8 high will be ignored, and commands with bit 8 low will send a message
 across the SPI channel.  For this reason, the software controller
-uses the {\tt DUAL_SPI} and {\tt QUAD_SPI} macros to determine speed
+uses the {\tt DUAL\_SPI} and {\tt QUAD\_SPI} macros to determine speed
 instead.
 
 

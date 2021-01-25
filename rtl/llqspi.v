@@ -1,7 +1,7 @@
 ////////////////////////////////////////////////////////////////////////////////
 //
 // Filename: 	llqspi.v
-//
+// {{{
 // Project:	A Set of Wishbone Controlled SPI Flash Controllers
 //
 // Purpose:	Reads/writes a word (user selectable number of bytes) of data
@@ -14,9 +14,9 @@
 //		Gisselquist Technology, LLC
 //
 ////////////////////////////////////////////////////////////////////////////////
-//
-// Copyright (C) 2015,2017-2019, Gisselquist Technology, LLC
-//
+// }}}
+// Copyright (C) 2015-2021, Gisselquist Technology, LLC
+// {{{
 // This file is part of the set of Wishbone controlled SPI flash controllers
 // project
 //
@@ -34,8 +34,9 @@
 // along with this program.  (It's in the $(ROOT)/doc directory.  Run make
 // with no target there if the PDF file isn't present.)  If not, see
 // <http://www.gnu.org/licenses/> for a copy.
-//
+// }}}
 // License:	LGPL, v3, as defined and found on www.gnu.org,
+// {{{
 //		http://www.gnu.org/licenses/lgpl.html
 //
 //
@@ -43,7 +44,7 @@
 //
 //
 `default_nettype	none
-//
+// }}}
 `define	QSPI_IDLE	3'h0
 `define	QSPI_START	3'h1
 `define	QSPI_BITS	3'h2
@@ -95,8 +96,8 @@ module	llqspi(i_clk,
 	// assign	o_dbg = { state, spi_len,
 		// o_busy, o_valid, o_cs_n, o_sck, o_mod, o_dat, i_dat };
 
-	// Timing:
-	//
+	// Timing (notes):
+	// {{{
 	//	Tick	Clk	BSY/WR	CS_n	BIT/MO	STATE
 	//	 0	1	0/0	1	 -	
 	//	 1	1	0/1	1	 -
@@ -188,7 +189,7 @@ module	llqspi(i_clk,
 	//	84	1	1/0	0	-	QSPI_STOPB
 	//	85	1	1/0	1	-	QSPI_IDLE
 	//	86	1	0/0	1	-	QSPI_IDLE
-
+	// }}}
 	wire	i_miso;
 	assign	i_miso = i_dat[1];
 
@@ -207,193 +208,224 @@ module	llqspi(i_clk,
 	initial o_mod   = `QSPI_MOD_SPI;
 	initial o_word  = 0;
 	always @(posedge i_clk)
-		if ((state == `QSPI_IDLE)&&(o_sck))
+	if ((state == `QSPI_IDLE)&&(o_sck))
+	begin
+		// {{{
+		o_cs_n <= 1'b1;
+		o_valid <= 1'b0;
+		o_busy  <= 1'b0;
+		o_mod <= `QSPI_MOD_SPI;
+		r_word <= i_word;
+		r_spd <= i_spd;
+		r_dir <= i_dir;
+		if ((i_wr)&&(!o_busy))
 		begin
-			o_cs_n <= 1'b1;
-			o_valid <= 1'b0;
-			o_busy  <= 1'b0;
-			o_mod <= `QSPI_MOD_SPI;
-			r_word <= i_word;
-			r_spd <= i_spd;
-			r_dir <= i_dir;
-			if ((i_wr)&&(!o_busy))
-			begin
-				state <= `QSPI_START;
-				spi_len<= { 1'b0, i_len, 3'b000 } + 6'h8;
-				o_cs_n <= 1'b0;
-				// o_sck <= 1'b1;
-				o_busy <= 1'b1;
-			end
-		end else if (state == `QSPI_START)
-		begin // We come in here with sck high, stay here 'til sck is low
-			o_sck <= 1'b0;
-			if (o_sck == 1'b0)
-			begin
-				state <= `QSPI_BITS;
-				spi_len<= spi_len - ( (r_spd)? 6'h4 : 6'h1 );
-				if (r_spd)
-					r_word <= { r_word[27:0], 4'h0 };
-				else
-					r_word <= { r_word[30:0], 1'b0 };
-			end
-			o_mod <= (r_spd) ? { 1'b1, r_dir } : `QSPI_MOD_SPI;
+			state <= `QSPI_START;
+			spi_len<= { 1'b0, i_len, 3'b000 } + 6'h8;
 			o_cs_n <= 1'b0;
+			// o_sck <= 1'b1;
 			o_busy <= 1'b1;
-			o_valid <= 1'b0;
-			if (r_spd)
-				o_dat <= r_word[31:28];
-			else
-				o_dat <= { 3'b110, r_word[31] };
-		end else if (!o_sck)
+		end
+		// }}}
+	end else if (state == `QSPI_START)
+	begin // We come in here with sck high, stay here 'til sck is low
+		// {{{
+		o_sck <= 1'b0;
+		if (o_sck == 1'b0)
 		begin
-			o_sck <= 1'b1;
-			o_busy <= ((state != `QSPI_READY)||(!i_wr));
-			o_valid <= 1'b0;
-		end else if (state == `QSPI_BITS)
-		begin
-			// Should enter into here with at least a spi_len
-			// of one, perhaps more
-			o_sck <= 1'b0;
-			o_busy <= 1'b1;
+			state <= `QSPI_BITS;
+			spi_len<= spi_len - ( (r_spd)? 6'h4 : 6'h1 );
 			if (r_spd)
-			begin
-				o_dat <= r_word[31:28];
 				r_word <= { r_word[27:0], 4'h0 };
-				spi_len <= spi_len - 6'h4;
-				if (spi_len == 6'h4)
-					state <= `QSPI_READY;
-			end else begin
-				o_dat <= { 3'b110, r_word[31] };
+			else
 				r_word <= { r_word[30:0], 1'b0 };
-				spi_len <= spi_len - 6'h1;
-				if (spi_len == 6'h1)
-					state <= `QSPI_READY;
-			end
-
-			o_valid <= 1'b0;
-			if (!o_mod[1])
-				r_input <= { r_input[29:0], i_miso };
-			else if (o_mod[1])
-				r_input <= { r_input[26:0], i_dat };
-		end else if (state == `QSPI_READY)
+		end
+		o_mod <= (r_spd) ? { 1'b1, r_dir } : `QSPI_MOD_SPI;
+		o_cs_n <= 1'b0;
+		o_busy <= 1'b1;
+		o_valid <= 1'b0;
+		if (r_spd)
+			o_dat <= r_word[31:28];
+		else
+			o_dat <= { 3'b110, r_word[31] };
+		// }}}
+	end else if (!o_sck)
+	begin
+		// {{{
+		o_sck <= 1'b1;
+		o_busy <= ((state != `QSPI_READY)||(!i_wr));
+		o_valid <= 1'b0;
+		// }}}
+	end else if (state == `QSPI_BITS)
+	begin
+		// {{{
+		// Should enter into here with at least a spi_len
+		// of one, perhaps more
+		o_sck <= 1'b0;
+		o_busy <= 1'b1;
+		if (r_spd)
 		begin
-			o_valid <= 1'b0;
-			o_cs_n <= 1'b0;
-			o_busy <= 1'b1;
-			// This is the state on the last clock (both low and
-			// high clocks) of the data.  Data is valid during
-			// this state.  Here we chose to either STOP or
-			// continue and transmit more.
-			o_sck <= (i_hold); // No clocks while holding
-			r_spd <= i_spd;
-			r_dir <= i_dir;
-			if (i_spd)
-			begin
-				r_word <= { i_word[27:0], 4'h0 };
-				spi_len<= { 1'b0, i_len, 3'b000 } + 6'h8 - 6'h4;
-			end else begin
-				r_word <= { i_word[30:0], 1'b0 };
-				spi_len<= { 1'b0, i_len, 3'b000 } + 6'h8 - 6'h1;
-			end
-			if((!o_busy)&&(i_wr))// Acknowledge a new request
-			begin
-				state <= `QSPI_BITS;
-				o_busy <= 1'b1;
-				o_sck <= 1'b0;
-
-				// Read the new request off the bus
-				// Set up the first bits on the bus
-				o_mod <= (i_spd) ? { 1'b1, i_dir } : `QSPI_MOD_SPI;
-				if (i_spd)
-					o_dat <= i_word[31:28];
-				else
-					o_dat <= { 3'b110, i_word[31] };
-
-			end else begin
-				o_sck <= 1'b1;
-				state <= (i_hold)?`QSPI_HOLDING : `QSPI_STOP;
-				o_busy <= (!i_hold);
-			end
-
-			// Read a bit upon any transition
-			o_valid <= 1'b1;
-			if (!o_mod[1])
-			begin
-				r_input <= { r_input[29:0], i_miso };
-				o_word  <= { r_input[30:0], i_miso };
-			end else if (o_mod[1])
-			begin
-				r_input <= { r_input[26:0], i_dat };
-				o_word  <= { r_input[27:0], i_dat };
-			end
-		end else if (state == `QSPI_HOLDING)
-		begin
-			// We need this state so that the o_valid signal
-			// can get strobed with our last result.  Otherwise
-			// we could just sit in READY waiting for a new command.
-			//
-			// Incidentally, the change producing this state was
-			// the result of a nasty race condition.  See the
-			// commends in wbqspiflash for more details.
-			//
-			o_valid <= 1'b0;
-			o_cs_n <= 1'b0;
-			o_busy <= 1'b0;
-			r_spd <= i_spd;
-			r_dir <= i_dir;
-			if (i_spd)
-			begin
-				r_word <= { i_word[27:0], 4'h0 };
-				spi_len<= { 1'b0, i_len, 3'b100 };
-			end else begin
-				r_word <= { i_word[30:0], 1'b0 };
-				spi_len<= { 1'b0, i_len, 3'b111 };
-			end
-			if((!o_busy)&&(i_wr))// Acknowledge a new request
-			begin
-				state  <= `QSPI_BITS;
-				o_busy <= 1'b1;
-				o_sck  <= 1'b0;
-
-				// Read the new request off the bus
-				// Set up the first bits on the bus
-				o_mod<=(i_spd)?{ 1'b1, i_dir } : `QSPI_MOD_SPI;
-				if (i_spd)
-					o_dat <= i_word[31:28];
-				else
-					o_dat <= { 3'b110, i_word[31] };
-			end else begin
-				o_sck <= 1'b1;
-				state <= (i_hold)?`QSPI_HOLDING : `QSPI_STOP;
-				o_busy <= (!i_hold);
-			end
-		end else if (state == `QSPI_STOP)
-		begin
-			o_sck   <= 1'b1; // Stop the clock
-			o_valid <= 1'b0; // Output may have just been valid, but no more
-			o_busy  <= 1'b1; // Still busy till port is clear
-			state <= `QSPI_STOP_B;
-			o_mod <= `QSPI_MOD_SPI;
-		end else if (state == `QSPI_STOP_B)
-		begin
-			o_cs_n <= 1'b1;
-			o_sck <= 1'b1;
-			// Do I need this????
-			// spi_len <= 3; // Minimum CS high time before next cmd
-			state <= `QSPI_IDLE;
-			o_valid <= 1'b0;
-			o_busy <= 1'b1;
-			o_mod <= `QSPI_MOD_SPI;
-		end else begin // Invalid states, should never get here
-			state   <= `QSPI_STOP;
-			o_valid <= 1'b0;
-			o_busy  <= 1'b1;
-			o_cs_n  <= 1'b1;
-			o_sck   <= 1'b1;
-			o_mod   <= `QSPI_MOD_SPI;
-			o_dat   <= 4'hd;
+			// {{{
+			o_dat <= r_word[31:28];
+			r_word <= { r_word[27:0], 4'h0 };
+			spi_len <= spi_len - 6'h4;
+			if (spi_len == 6'h4)
+				state <= `QSPI_READY;
+			// }}}
+		end else begin
+			// {{{
+			o_dat <= { 3'b110, r_word[31] };
+			r_word <= { r_word[30:0], 1'b0 };
+			spi_len <= spi_len - 6'h1;
+			if (spi_len == 6'h1)
+				state <= `QSPI_READY;
+			// }}}
 		end
 
+		o_valid <= 1'b0;
+		if (!o_mod[1])
+			r_input <= { r_input[29:0], i_miso };
+		else if (o_mod[1])
+			r_input <= { r_input[26:0], i_dat };
+		// }}}
+	end else if (state == `QSPI_READY)
+	begin
+		// {{{
+		o_valid <= 1'b0;
+		o_cs_n <= 1'b0;
+		o_busy <= 1'b1;
+		// This is the state on the last clock (both low and
+		// high clocks) of the data.  Data is valid during
+		// this state.  Here we chose to either STOP or
+		// continue and transmit more.
+		o_sck <= (i_hold); // No clocks while holding
+		r_spd <= i_spd;
+		r_dir <= i_dir;
+		if (i_spd)
+		begin
+			r_word <= { i_word[27:0], 4'h0 };
+			spi_len<= { 1'b0, i_len, 3'b000 } + 6'h8 - 6'h4;
+		end else begin
+			r_word <= { i_word[30:0], 1'b0 };
+			spi_len<= { 1'b0, i_len, 3'b000 } + 6'h8 - 6'h1;
+		end
+		if((!o_busy)&&(i_wr))// Acknowledge a new request
+		begin
+			// {{{
+			state <= `QSPI_BITS;
+			o_busy <= 1'b1;
+			o_sck <= 1'b0;
+
+			// Read the new request off the bus
+			// Set up the first bits on the bus
+			o_mod <= (i_spd) ? { 1'b1, i_dir } : `QSPI_MOD_SPI;
+			if (i_spd)
+				o_dat <= i_word[31:28];
+			else
+				o_dat <= { 3'b110, i_word[31] };
+			// }}}
+		end else begin
+			o_sck <= 1'b1;
+			state <= (i_hold)?`QSPI_HOLDING : `QSPI_STOP;
+			o_busy <= (!i_hold);
+		end
+
+		// Read a bit upon any transition
+		o_valid <= 1'b1;
+		if (!o_mod[1])
+		begin
+			r_input <= { r_input[29:0], i_miso };
+			o_word  <= { r_input[30:0], i_miso };
+		end else if (o_mod[1])
+		begin
+			r_input <= { r_input[26:0], i_dat };
+			o_word  <= { r_input[27:0], i_dat };
+		end
+		// }}}
+	end else if (state == `QSPI_HOLDING)
+	begin
+		// {{{
+		// We need this state so that the o_valid signal
+		// can get strobed with our last result.  Otherwise
+		// we could just sit in READY waiting for a new command.
+		//
+		// Incidentally, the change producing this state was
+		// the result of a nasty race condition.  See the
+		// commends in wbqspiflash for more details.
+		//
+		o_valid <= 1'b0;
+		o_cs_n <= 1'b0;
+		o_busy <= 1'b0;
+		r_spd <= i_spd;
+		r_dir <= i_dir;
+		if (i_spd)
+		begin
+			r_word <= { i_word[27:0], 4'h0 };
+			spi_len<= { 1'b0, i_len, 3'b100 };
+		end else begin
+			r_word <= { i_word[30:0], 1'b0 };
+			spi_len<= { 1'b0, i_len, 3'b111 };
+		end
+		if((!o_busy)&&(i_wr))// Acknowledge a new request
+		begin
+			state  <= `QSPI_BITS;
+			o_busy <= 1'b1;
+			o_sck  <= 1'b0;
+
+			// Read the new request off the bus
+			// Set up the first bits on the bus
+			o_mod<=(i_spd)?{ 1'b1, i_dir } : `QSPI_MOD_SPI;
+			if (i_spd)
+				o_dat <= i_word[31:28];
+			else
+				o_dat <= { 3'b110, i_word[31] };
+		end else begin
+			o_sck <= 1'b1;
+			state <= (i_hold)?`QSPI_HOLDING : `QSPI_STOP;
+			o_busy <= (!i_hold);
+		end
+		// }}}
+	end else if (state == `QSPI_STOP)
+	begin
+		// {{{
+		o_sck   <= 1'b1; // Stop the clock
+		o_valid <= 1'b0; // Output may have just been valid, but no more
+		o_busy  <= 1'b1; // Still busy till port is clear
+		state <= `QSPI_STOP_B;
+		o_mod <= `QSPI_MOD_SPI;
+		// }}}
+	end else if (state == `QSPI_STOP_B)
+	begin
+		// {{{
+		o_cs_n <= 1'b1;
+		o_sck <= 1'b1;
+		// Do I need this????
+		// spi_len <= 3; // Minimum CS high time before next cmd
+		state <= `QSPI_IDLE;
+		o_valid <= 1'b0;
+		o_busy <= 1'b1;
+		o_mod <= `QSPI_MOD_SPI;
+		// }}}
+	end else begin // Invalid states, should never get here
+		// {{{
+		state   <= `QSPI_STOP;
+		o_valid <= 1'b0;
+		o_busy  <= 1'b1;
+		o_cs_n  <= 1'b1;
+		o_sck   <= 1'b1;
+		o_mod   <= `QSPI_MOD_SPI;
+		o_dat   <= 4'hd;
+		// }}}
+	end
+////////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////
+//
+// Formal property section
+// {{{
+////////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////
 `ifdef	FORMAL
 	reg	prev_i_clk, past_valid;
 
@@ -611,5 +643,5 @@ module	llqspi(i_clk,
 			assert((o_valid) || (o_word == $past(o_word)));
 	end
 `endif
-
+// }}}
 endmodule

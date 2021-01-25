@@ -1,7 +1,7 @@
 ////////////////////////////////////////////////////////////////////////////////
 //
 // Filename:	dualflexpress.v
-//
+// {{{
 // Project:	A Set of Wishbone Controlled SPI Flash Controllers
 //
 // Purpose:	To provide wishbone controlled read access (and read access
@@ -33,9 +33,9 @@
 //		Gisselquist Technology, LLC
 //
 ////////////////////////////////////////////////////////////////////////////////
-//
-// Copyright (C) 2018-2019, Gisselquist Technology, LLC
-//
+// }}}
+// Copyright (C) 2018-2021, Gisselquist Technology, LLC
+// {{{
 // This file is part of the set of Wishbone controlled SPI flash controllers
 // project
 //
@@ -53,8 +53,9 @@
 // along with this program.  (It's in the $(ROOT)/doc directory.  Run make
 // with no target there if the PDF file isn't present.)  If not, see
 // <http://www.gnu.org/licenses/> for a copy.
-//
+// }}}
 // License:	LGPL, v3, as defined and found on www.gnu.org,
+// {{{
 //		http://www.gnu.org/licenses/lgpl.html
 //
 //
@@ -62,127 +63,156 @@
 //
 //
 `default_nettype	none
-//
+// }}}
 // 290 raw, 372 w/ pipe, 410 cfg, 499 cfg w/pipe
-module	dualflexpress(i_clk, i_reset,
-		i_wb_cyc, i_wb_stb, i_cfg_stb, i_wb_we, i_wb_addr, i_wb_data,
-			o_wb_ack, o_wb_stall, o_wb_data,
-		o_dspi_sck, o_dspi_cs_n, o_dspi_mod, o_dspi_dat, i_dspi_dat,
-		o_dbg_trigger, o_debug);
-
-	//
-	// LGFLASHSZ is the size of the flash memory.  It defines the number
-	// of bits in the address register and more.  This controller will support
-	// flash sizes up to 2^LGFLASHSZ, where LGFLASHSZ goes up to 32.
-	parameter	LGFLASHSZ=24;
-	//
-	// OPT_PIPE makes it possible to string multiple requests together,
-	// with no intervening need to shutdown the QSPI connection and send a
-	// new address
-	parameter [0:0]	OPT_PIPE    = 1'b1;
-	//
-	// OPT_CFG enables the configuration logic port, and hence the
-	// ability to erase and program the flash, as well as the ability
-	// to perform other commands such as read-manufacturer ID, adjust
-	// configuration registers, etc.
-	parameter [0:0]	OPT_CFG     = 1'b1;
-	//
-	// OPT_STARTUP enables the startup logic
-	parameter [0:0]	OPT_STARTUP = 1'b1;
-	//
-	// OPT_ADDR32 enables 32 bit addressing, rather than 24bit
-	// Control this by controlling the LGFLASHSZ parameter above.  Anything
-	// greater than 24 will use 32-bit addressing, otherwise the regular
-	// 24-bit addressing
-	localparam [0:0]	OPT_ADDR32 = (LGFLASHSZ > 24);
-	//
-	parameter	OPT_CLKDIV = 0;
-	//
-	// Normally, I place the first byte read from the flash, and the lowest
-	// flash address, into bits [7:0], and then shift it up--to where upon
-	// return it is found in bits [31:24].  This is ideal for a big endian
-	// systems, not so much for little endian systems.  The endian swap
-	// allows the bus to swap the return values in order to support little
-	// endian systems.
-	parameter [0:0]	OPT_ENDIANSWAP = 1'b1;
-	//
-	// OPT_ODDR will be true any time the clock has no clock division
-	localparam [0:0]	OPT_ODDR = (OPT_CLKDIV == 0);
-	//
-	// CKDV_BITS is the number of bits necessary to represent a counter
-	// that can do the CLKDIV division
-	localparam 	CKDV_BITS = (OPT_CLKDIV == 0) ? 0
-				: ((OPT_CLKDIV <   2) ? 1
-				: ((OPT_CLKDIV <   4) ? 2
-				: ((OPT_CLKDIV <   8) ? 3
-				: ((OPT_CLKDIV <  16) ? 4
-				: ((OPT_CLKDIV <  32) ? 5
-				: ((OPT_CLKDIV <  64) ? 6
-				: ((OPT_CLKDIV < 128) ? 7
-				: ((OPT_CLKDIV < 256) ? 8 : 9))))))));
-	//
-	// RDDELAY is the number of clock cycles from when o_dspi_dat is valid
-	// until i_dspi_dat is valid.  Read delays from 0-4 have been verified.
-	// DDR Registered I/O on a Xilinx device can be done with a RDDELAY=3
-	// On Intel/Altera devices, RDDELAY=2 works
-	// I'm using RDDELAY=0 for my iCE40 devices
-	//
-	parameter	RDDELAY = 0;
-	//
-	// NDUMMY is the number of "dummy" clock cycles between the 24-bits of
-	// the Quad I/O address and the first data bits.  This includes the
-	// two clocks of the Quad output mode byte, 0xa0.  The default is 10
-	// for a Micron device.  Windbond seems to want 2.  Note your flash
-	// device carefully when you choose this value.
-	//
-	parameter	NDUMMY = 8;
-	//
-	// For dealing with multiple flash devices, the OPT_STARTUP_FILE allows
-	// a hex file to be provided containing the necessary script to place
-	// the design into the proper initial configuration.
-	parameter	OPT_STARTUP_FILE="";
-	//
-	//
-	//
-	//
-	localparam [4:0]	CFG_MODE =	12;
-	localparam [4:0]	QSPEED_BIT = 	11; // Not supported
-	localparam [4:0]	DSPEED_BIT = 	10;
-	localparam [4:0]	DIR_BIT	= 	 9;
-	localparam [4:0]	USER_CS_n = 	 8;
-	//
-	localparam [1:0]	NORMAL_SPI = 	2'b00;
-	localparam [1:0]	DUAL_WRITE = 	2'b10;
-	localparam [1:0]	DUAL_READ = 	2'b11;
-	localparam [7:0] DIO_READ_CMD = 8'hbb;
-	//
-	localparam	AW=LGFLASHSZ-2;
-	localparam	DW=32;
-	//
+module	dualflexpress #(
+		// {{{
+		// LGFLASHSZ
+		// {{{
+		// LGFLASHSZ is the size of the flash memory.  It defines the
+		// number of bits in the address register and more.  This
+		// controller will support flash sizes up to 2^LGFLASHSZ,
+		// where LGFLASHSZ goes up to 32.
+		parameter	LGFLASHSZ=24,
+		// }}}
+		// OPT_PIPE
+		// {{{
+		// OPT_PIPE makes it possible to string multiple requests
+		// together, with no intervening need to shutdown the QSPI
+		// connection and send a new address
+		parameter [0:0]	OPT_PIPE    = 1'b1,
+		// }}}
+		// OPT_CFG
+		// {{{
+		// OPT_CFG enables the configuration logic port, and hence the
+		// ability to erase and program the flash, as well as the
+		// ability to perform other commands such as read-manufacturer
+		// ID, adjust configuration registers, etc.
+		parameter [0:0]	OPT_CFG     = 1'b1,
+		// }}}
+		// OPT_STARTUP enables the startup logic
+		// {{{
+		parameter [0:0]	OPT_STARTUP = 1'b1,
+		// }}}
+		// OPT_ADDR32
+		// {{{
+		// OPT_ADDR32 enables 32 bit addressing, rather than 24bit
+		// Control this by controlling the LGFLASHSZ parameter above.
+		// Anything greater than 24 will use 32-bit addressing,
+		// otherwise the regular 24-bit addressing
+		localparam [0:0]	OPT_ADDR32 = (LGFLASHSZ > 24),
+		// }}}
+		// OPT_CLKDIV
+		// {{{
+		parameter	OPT_CLKDIV = 0,
+		// }}}
+		// OPT_ENDIANSWAP
+		// {{{
+		// Normally, I place the first byte read from the flash, and
+		// the lowest flash address, into bits [7:0], and then shift
+		// it up--to where upon return it is found in bits [31:24].
+		// This is ideal for a big endian systems, not so much for
+		// little endian systems.  The endian swap allows the bus to
+		// swap the return values in order to support little endian
+		// systems.
+		parameter [0:0]	OPT_ENDIANSWAP = 1'b1,
+		// }}}
+		// OPT_ODDR
+		// {{{
+		// OPT_ODDR will be true any time the clock has no clock
+		// division
+		localparam [0:0]	OPT_ODDR = (OPT_CLKDIV == 0),
+		// }}}
+		// CKDV_BITS
+		// {{{
+		// CKDV_BITS is the number of bits necessary to represent a
+		// counter that can do the CLKDIV division
+		localparam 	CKDV_BITS = (OPT_CLKDIV == 0) ? 0
+					: ((OPT_CLKDIV <   2) ? 1
+					: ((OPT_CLKDIV <   4) ? 2
+					: ((OPT_CLKDIV <   8) ? 3
+					: ((OPT_CLKDIV <  16) ? 4
+					: ((OPT_CLKDIV <  32) ? 5
+					: ((OPT_CLKDIV <  64) ? 6
+					: ((OPT_CLKDIV < 128) ? 7
+					: ((OPT_CLKDIV < 256) ? 8 : 9)))))))),
+		// }}}
+		// RDDELAY
+		// {{{
+		// RDDELAY is the number of clock cycles from when o_dspi_dat
+		// is valid until i_dspi_dat is valid.  Read delays from 0-4
+		// have been verified.  DDR Registered I/O on a Xilinx device
+		// can be done with a RDDELAY=3.  On Intel/Altera devices,
+		// RDDELAY=2 works.  I'm using RDDELAY=0 for my iCE40 devices
+		parameter	RDDELAY = 0,
+		// }}}
+		// NDUMMY
+		// {{{
+		// NDUMMY is the number of "dummy" clock cycles between the
+		// 24-bits of the Quad I/O address and the first data bits.
+		// This includes the two clocks of the Quad output mode byte,
+		// 0xa0.  The default is 10 for a Micron device.  Windbond
+		// seems to want 2.  Note your flash device carefully when
+		// you choose this value.
+		parameter	NDUMMY = 8,
+		// }}}
+		// OPT_STARTUP_FILE
+		// {{{
+		// For dealing with multiple flash devices, the
+		// OPT_STARTUP_FILE allows a hex file to be provided containing
+		// the necessary script to place the design into the proper
+		// initial configuration
+		parameter	OPT_STARTUP_FILE="",
+		// }}}
+		//
+		//
+		//
+		localparam [4:0]	CFG_MODE =	12,
+		localparam [4:0]	QSPEED_BIT = 	11, // Not supported
+		localparam [4:0]	DSPEED_BIT = 	10,
+		localparam [4:0]	DIR_BIT	= 	 9,
+		localparam [4:0]	USER_CS_n = 	 8,
+		//
+		localparam [1:0]	NORMAL_SPI = 	2'b00,
+		localparam [1:0]	DUAL_WRITE = 	2'b10,
+		localparam [1:0]	DUAL_READ = 	2'b11,
+		localparam [7:0] DIO_READ_CMD = 8'hbb,
+		//
+		localparam	AW=LGFLASHSZ-2,
+		localparam	DW=32
+		//
 `ifdef	FORMAL
-	localparam	F_LGDEPTH=$clog2(12+16+1+NDUMMY+RDDELAY+(OPT_ADDR32 ? 4:0));
+		, localparam	F_LGDEPTH=$clog2(12+16+1+NDUMMY+RDDELAY+(OPT_ADDR32 ? 4:0))
+		// reg	f_past_valid;
+`endif
+		// }}}
+	) (
+		// {{{
+		input	wire			i_clk, i_reset,
+		//
+		input	wire			i_wb_cyc, i_wb_stb, i_cfg_stb, i_wb_we,
+		input	wire	[(AW-1):0]	i_wb_addr,
+		input	wire	[(DW-1):0]	i_wb_data,
+		//
+		output	reg			o_wb_ack, o_wb_stall,
+		output	reg	[(DW-1):0]	o_wb_data,
+		//
+		output	reg		o_dspi_sck,
+		output	reg		o_dspi_cs_n,
+		output	reg	[1:0]	o_dspi_mod,
+		output	wire	[1:0]	o_dspi_dat,
+		input	wire	[1:0]	i_dspi_dat,
+		// Debugging port
+		output	wire		o_dbg_trigger,
+		output	wire	[31:0]	o_debug
+		// }}}
+	);
+
+	// Signal declarations
+	// {{{
+`ifdef	FORMAL
 	reg	f_past_valid;
 `endif
-	//
-	//
-	input	wire			i_clk, i_reset;
-	//
-	input	wire			i_wb_cyc, i_wb_stb, i_cfg_stb, i_wb_we;
-	input	wire	[(AW-1):0]	i_wb_addr;
-	input	wire	[(DW-1):0]	i_wb_data;
-	//
-	output	reg			o_wb_ack, o_wb_stall;
-	output	reg	[(DW-1):0]	o_wb_data;
-	//
-	output	reg		o_dspi_sck;
-	output	reg		o_dspi_cs_n;
-	output	reg	[1:0]	o_dspi_mod;
-	output	wire	[1:0]	o_dspi_dat;
-	input	wire	[1:0]	i_dspi_dat;
-	// Debugging port
-	output	wire		o_dbg_trigger;
-	output	wire	[31:0]	o_debug;
-
 	reg		dly_ack, read_sck, xtra_stall;
 	// clk_ctr must have enough bits for ...
 	//	12		address clocks, 2-bits each
@@ -222,10 +252,25 @@ module	dualflexpress(i_clk, i_reset,
 	reg		m_clk;
 	reg	[1:0]	m_dat;
 
+	reg	[32+(OPT_ADDR32 ? 8:0)+2*(OPT_ODDR ? 0:1)-1:0]	data_pipe;
+	reg	pre_ack = 1'b0;
+	reg	actual_sck;
 
+	reg	r_last_cfg;
+
+	// }}}
+
+	////////////////////////////////////////////////////////////////////////
+	//
+	// Clock division
+	// {{{
+	////////////////////////////////////////////////////////////////////////
+	//
+	// ckstb, ckpos, ckneg, ckpre
+	// {{{
 	generate if (OPT_ODDR)
 	begin
-
+		// {{{
 		always @(*)
 		begin
 			ckstb = 1'b1;
@@ -233,10 +278,10 @@ module	dualflexpress(i_clk, i_reset,
 			ckneg = 1'b1;
 			ckpre = 1'b1;
 		end
-
+		// }}}
 	end else if (OPT_CLKDIV == 1)
 	begin : CKSTB_ONE
-
+		// {{{
 		reg	clk_counter;
 
 		initial	clk_counter = 1'b1;
@@ -257,9 +302,9 @@ module	dualflexpress(i_clk, i_reset,
 			ckpos = (clk_counter == 1);
 			ckneg = (clk_counter == 0);
 		end
-
+		// }}}
 	end else begin : CKSTB_GEN
-
+		// {{{
 		reg	[CKDV_BITS-1:0]	clk_counter;
 
 		initial	clk_counter = OPT_CLKDIV;
@@ -292,22 +337,30 @@ module	dualflexpress(i_clk, i_reset,
 		always @(*)
 			ckneg = ckstb;
 `ifdef	FORMAL
+		// {{{
 		always @(*)
 			assert(!ckpos || !ckneg);
 
 		always @(posedge i_clk)
 		if ((f_past_valid)&&(!$past(i_reset))&&($past(ckpre)))
 			assert(ckstb);
+		// }}}
 `endif
+		// }}}
 	end endgenerate
-
+	// }}}
+	// }}}
+	////////////////////////////////////////////////////////////////////////
 	//
+	// Startup logic
+	// {{{
+	////////////////////////////////////////////////////////////////////////
 	//
-	// Maintenance / startup portion
 	//
 	//
 	generate if (OPT_STARTUP)
 	begin : GEN_STARTUP
+		// {{{
 		localparam	M_WAITBIT=10;
 		localparam	M_LGADDR=5;
 `ifdef	FORMAL
@@ -553,6 +606,7 @@ module	dualflexpress(i_clk, i_reset,
 		end
 
 `ifdef	FORMAL
+		// {{{
 		(* anyconst *) reg [M_LGADDR:0]	f_const_addr;
 
 		always @(*)
@@ -724,9 +778,11 @@ module	dualflexpress(i_clk, i_reset,
 		4'b1000: assert(m_dat[1:0] == f_last_word[1:0]);
 		default: begin assert(0); end
 		endcase
+		// }}}
 `endif
+		// }}}
 	end else begin : NO_STARTUP_OPT
-
+		// {{{
 		always @(*)
 		begin
 			maintenance = 0;
@@ -737,22 +793,23 @@ module	dualflexpress(i_clk, i_reset,
 		end
 
 		// verilator lint_off UNUSED
-		wire	[6:0] unused_maintenance;
-		assign	unused_maintenance = { maintenance,
+		wire	unused_maintenance;
+		assign	unused_maintenance = &{ 1'b0, maintenance,
 					m_mod, m_cs_n, m_clk, m_dat };
 		// verilator lint_on  UNUSED
+		// }}}
 	end endgenerate
+	// }}}
+	////////////////////////////////////////////////////////////////////////
+	//
+	// Data / access logic
+	// {{{
+	////////////////////////////////////////////////////////////////////////
+	//
+	//
 
-
-	reg	[32+(OPT_ADDR32 ? 8:0)+2*(OPT_ODDR ? 0:1)-1:0]	data_pipe;
-	reg	pre_ack = 1'b0;
-	reg	actual_sck;
-
-	//
-	//
-	// Data / access portion
-	//
-	//
+	// data_pipe
+	// {{{
 	initial	data_pipe = 0;
 	always @(posedge i_clk)
 	begin
@@ -789,9 +846,12 @@ module	dualflexpress(i_clk, i_reset,
 		if (maintenance)
 			data_pipe[30+(OPT_ADDR32 ? 8:0)+2*(OPT_ODDR ? 0:1) +: 2] <= m_dat;
 	end
+	// }}}
 
 	assign	o_dspi_dat = data_pipe[30+(OPT_ADDR32 ? 8:0)+2*(OPT_ODDR ? 0:1) +: 2];
 
+	// pre_ack
+	// {{{
 	// Since we can't abort any transaction once started, without
 	// risking losing XIP mode or any other mode we might be in, we'll
 	// keep track of whether this operation should be ack'd upon
@@ -801,37 +861,52 @@ module	dualflexpress(i_clk, i_reset,
 		pre_ack <= 1'b0;
 	else if ((bus_request)||(cfg_write))
 		pre_ack <= 1'b1;
+	// }}}
 
+	// pipe_req
+	// {{{
 	generate if (OPT_PIPE)
 	begin : OPT_PIPE_BLOCK
-		reg	r_pipe_req;
-		wire	w_pipe_condition;
-
+		// {{{
+		reg			r_pipe_req;
+		wire			w_pipe_condition;
 		reg	[(AW-1):0]	next_addr;
+
+		// {{{
 		always  @(posedge i_clk)
 		if (!o_wb_stall)
 			next_addr <= i_wb_addr + 1'b1;
+		// }}}
 
+		// w_pipe_condition
+		// {{{
 		assign	w_pipe_condition = (i_wb_stb)&&(!i_wb_we)&&(pre_ack)
 				&&(!maintenance)
 				&&(!cfg_mode)
 				&&(!o_dspi_cs_n)
 				&&(|clk_ctr[2:0])
 				&&(next_addr == i_wb_addr);
+		// }}}
 
+		// r_pipe_req
+		// {{{
 		initial	r_pipe_req = 1'b0;
 		always @(posedge i_clk)
 		if ((clk_ctr == 1)&&(ckstb))
 			r_pipe_req <= 1'b0;
 		else
 			r_pipe_req <= w_pipe_condition;
+		// }}}
 
 		assign	pipe_req = r_pipe_req;
+		// }}}
 	end else begin
 		assign	pipe_req = 1'b0;
 	end endgenerate
+	// }}}
 
-
+	// clk_ctr
+	// {{{
 	initial	clk_ctr = 0;
 	always @(posedge i_clk)
 	if ((i_reset)||(maintenance))
@@ -851,7 +926,10 @@ module	dualflexpress(i_clk, i_reset,
 		clk_ctr <= 6'd4 + ((OPT_ODDR) ? 0:1);
 	else if ((ckstb)&&(|clk_ctr))
 		clk_ctr <= clk_ctr - 1'b1;
+	// }}}
 
+	// o_dspi_sck
+	// {{{
 	initial	o_dspi_sck = (!OPT_ODDR);
 	always @(posedge i_clk)
 	if (i_reset)
@@ -864,6 +942,7 @@ module	dualflexpress(i_clk, i_reset,
 		o_dspi_sck <= 1'b1;
 	else if (OPT_ODDR)
 	begin
+		// {{{
 		if ((cfg_mode)&&(clk_ctr <= 1))
 			// Config mode has no pipe instructions
 			o_dspi_sck <= 1'b0;
@@ -871,10 +950,13 @@ module	dualflexpress(i_clk, i_reset,
 			o_dspi_sck <= 1'b1;
 		else
 			o_dspi_sck <= 1'b0;
+		// }}}
 	end else if (((ckpos)&&(!o_dspi_sck))||(o_dspi_cs_n))
 	begin
 		o_dspi_sck <= 1'b1;
-	end else if ((ckneg)&&(o_dspi_sck)) begin
+	end else if ((ckneg)&&(o_dspi_sck))
+	begin
+		// {{{
 
 		if ((cfg_mode)&&(clk_ctr <= 1))
 			// Config mode has no pipe instructions
@@ -883,8 +965,12 @@ module	dualflexpress(i_clk, i_reset,
 			o_dspi_sck <= 1'b0;
 		else
 			o_dspi_sck <= 1'b1;
+		// }}}
 	end
+	// }}}
 
+	// o_dspi_cs_n
+	// {{{
 	initial	o_dspi_cs_n = 1'b1;
 	always @(posedge i_clk)
 	if (i_reset)
@@ -899,7 +985,10 @@ module	dualflexpress(i_clk, i_reset,
 		o_dspi_cs_n <= 1'b0;
 	else if (ckstb)
 		o_dspi_cs_n <= (clk_ctr <= 1);
+	// }}}
 
+	// o_dspi_mod -- controlling the mode of the external pins
+	// {{{
 	// Control the mode of the external pins
 	// 	NORMAL_SPI: i_miso is an input,  o_mosi is an output
 	// 	DUAL_READ:  i_miso is an input,  o_mosi is an input
@@ -920,7 +1009,10 @@ module	dualflexpress(i_clk, i_reset,
 		o_dspi_mod <= NORMAL_SPI;
 	else if ((ckstb)&&(clk_ctr <= 6'd17)&&((!cfg_mode)||(!cfg_dir)))
 		o_dspi_mod <= DUAL_READ;
+	// }}}
 
+	// o_wb_stall
+	// {{{
 	initial	o_wb_stall = 1'b1;
 	always @(posedge i_clk)
 	if (i_reset)
@@ -941,7 +1033,10 @@ module	dualflexpress(i_clk, i_reset,
 			o_wb_stall <= 1'b0;
 	end else if (ckpre && (i_wb_stb)&&(pipe_req)&&(clk_ctr == 6'd1))
 		o_wb_stall <= 1'b0;
+	// }}}
 
+	// dly_ack
+	// {{{
 	initial	dly_ack = 1'b0;
 	always @(posedge i_clk)
 	if (i_reset)
@@ -954,7 +1049,10 @@ module	dualflexpress(i_clk, i_reset,
 		dly_ack <= 1'b1;
 	else
 		dly_ack <= 1'b0;
+	// }}}
 
+	// actual_sck
+	// {{{
 	generate if (OPT_ODDR)
 	begin : SCK_ACTUAL
 
@@ -981,15 +1079,17 @@ module	dualflexpress(i_clk, i_reset,
 			actual_sck <= (o_dspi_sck)&&(ckpre)&&(clk_ctr > 0);
 
 	end endgenerate
+	// }}}
 
-
+	// read_sck, o_wb_ack, xtra_stall
+	// {{{
 `ifdef	FORMAL
 	reg	[F_LGDEPTH-1:0]	f_extra;
 `endif
 
 	generate if (RDDELAY == 0)
 	begin : RDDELAY_NONE
-
+		// {{{
 		always @(*)
 		begin
 			read_sck = actual_sck;
@@ -1001,18 +1101,21 @@ module	dualflexpress(i_clk, i_reset,
 		always @(*)
 			f_extra = 0;
 `endif
-
+		// }}}
 	end else
 	begin : RDDELAY_NONZERO
-
+		// {{{
 		reg	[RDDELAY-1:0]	sck_pipe, ack_pipe, stall_pipe;
 		reg	not_done;
 
+		// sck_pipe, ack_pipe, stall_pipe
+		// {{{
 		initial	sck_pipe = 0;
 		initial	ack_pipe = 0;
 		initial	stall_pipe = -1;
 		if (RDDELAY > 1)
 		begin
+			// {{{
 			always @(posedge i_clk)
 			if (i_reset)
 				sck_pipe <= 0;
@@ -1030,10 +1133,10 @@ module	dualflexpress(i_clk, i_reset,
 				stall_pipe <= -1;
 			else
 				stall_pipe <= { stall_pipe[RDDELAY-2:0], not_done };
-
-
+			// }}}
 		end else // if (RDDELAY > 0)
 		begin
+			// {{{
 			always @(posedge i_clk)
 			if (i_reset)
 				sck_pipe <= 0;
@@ -1051,8 +1154,12 @@ module	dualflexpress(i_clk, i_reset,
 				stall_pipe <= -1;
 			else
 				stall_pipe <= not_done;
+			// }}}
 		end
+		// }}}
 
+		// not_done
+		// {{{
 		always @(*)
 		begin
 			not_done = (i_wb_stb || i_cfg_stb) && !o_wb_stall;
@@ -1061,6 +1168,7 @@ module	dualflexpress(i_clk, i_reset,
 			if ((clk_ctr == 1)&&(!ckstb))
 				not_done = 1'b1;
 		end
+		// }}}
 
 		always @(*)
 			o_wb_ack = ack_pipe[RDDELAY-1];
@@ -1082,15 +1190,19 @@ module	dualflexpress(i_clk, i_reset,
 				f_extra = f_extra + (ack_pipe[k] ? 1 : 0);
 		end
 `endif // FORMAL
-
+		// }}}
 	end endgenerate
+	// }}}
 
+	// o_wb_data
+	// {{{
 	always @(posedge i_clk)
 	begin
 		if (read_sck)
 		begin
 			if (OPT_ENDIANSWAP && !cfg_mode)
 			begin
+				// {{{
 				if (!o_dspi_mod[1])
 				begin
 					o_wb_data <= { o_wb_data[30:24], i_dspi_dat[1],
@@ -1103,6 +1215,7 @@ module	dualflexpress(i_clk, i_reset,
 						o_wb_data[13:8], o_wb_data[23:22],
 						o_wb_data[5:0], o_wb_data[15:14]};
 				end
+				// }}}
 			end else if (!o_dspi_mod[1])
 				// No endian-swapping
 				o_wb_data <= { o_wb_data[30:0], i_dspi_dat[1] };
@@ -1114,27 +1227,38 @@ module	dualflexpress(i_clk, i_reset,
 			o_wb_data[16:8] <= { 4'h0, cfg_mode, 1'b0, cfg_speed,
 				cfg_dir, cfg_cs };
 	end
-
-
+	// }}}
+	// }}}
+	////////////////////////////////////////////////////////////////////////
+	//
+	// User override access
+	// {{{
+	////////////////////////////////////////////////////////////////////////
 	//
 	//
-	//  User override access
-	//
-	//
+	
+	// cfg_mode
+	// {{{
 	initial	cfg_mode = 1'b0;
 	always @(posedge i_clk)
 	if ((i_reset)||(!OPT_CFG))
 		cfg_mode <= 1'b0;
 	else if ((i_cfg_stb)&&(!o_wb_stall)&&(i_wb_we))
 		cfg_mode <= i_wb_data[CFG_MODE];
+	// }}}
 
+	// cfg_cs
+	// {{{
 	initial	cfg_cs = 1'b0;
 	always @(posedge i_clk)
 	if ((i_reset)||(!OPT_CFG))
 		cfg_cs <= 1'b0;
 	else if ((i_cfg_stb)&&(!o_wb_stall)&&(i_wb_we))
 		cfg_cs    <= (!i_wb_data[USER_CS_n])&&(i_wb_data[CFG_MODE]);
+	// }}}
 
+	// cfg_speed, cfg_dir
+	// {{{
 	initial	cfg_speed = 1'b0;
 	initial	cfg_dir   = 1'b0;
 	always @(posedge i_clk)
@@ -1147,12 +1271,23 @@ module	dualflexpress(i_clk, i_reset,
 		cfg_speed <= i_wb_data[DSPEED_BIT];
 		cfg_dir   <= i_wb_data[DIR_BIT];
 	end
+	// }}}
 
-	reg	r_last_cfg;
-
+	// r_last_cfg
+	// {{{
 	initial	r_last_cfg = 1'b0;
 	always @(posedge i_clk)
 		r_last_cfg <= cfg_mode;
+	// }}}
+
+	// }}}
+	////////////////////////////////////////////////////////////////////////
+	//
+	// Debugging bus (if used)
+	// {{{
+	////////////////////////////////////////////////////////////////////////
+	//
+	//
 	assign	o_dbg_trigger = (!cfg_mode)&&(r_last_cfg);
 	assign	o_debug = { o_dbg_trigger,
 			i_wb_cyc, i_cfg_stb, i_wb_stb, o_wb_ack, o_wb_stall,//6
@@ -1163,13 +1298,27 @@ module	dualflexpress(i_clk, i_reset,
 				&&(i_wb_we)&&(!o_wb_stall)&&(!o_wb_ack))
 				? i_wb_data[7:0] : o_wb_data[7:0]
 			};
+	// }}}
 
+	// Make Verilator happy
+	// {{{
 	// verilator lint_off UNUSED
 	wire	[19:0]	unused;
 	assign	unused = { i_wb_data[31:12] };
 	// verilator lint_on  UNUSED
-
+	// }}}
+////////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////
+//
+// Formal properties
+// {{{
+////////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////
 `ifdef	FORMAL
+	// Declarations
+	// {{{
 	localparam	F_MEMDONE   = NDUMMY+12+16+(OPT_ADDR32 ? 4:0)+(OPT_ODDR ? 0:1);
 	localparam	F_MEMACK    = F_MEMDONE + RDDELAY;
 	localparam	F_PIPEDONE  = 16;
@@ -1193,7 +1342,7 @@ module	dualflexpress(i_clk, i_reset,
 	reg	[F_CFGHSACK:0]	f_cfghsread;
 	reg	[F_CFGHSACK:0]	f_cfghswrite;
 	reg	[F_CFGLSACK:0]	f_cfglswrite;
-
+	// }}}
 //
 //
 // Generic setup
@@ -1214,14 +1363,13 @@ module	dualflexpress(i_clk, i_reset,
 	always @(*)
 	if (!f_past_valid)
        		`ASSUME(i_reset);
-
-	/////////////////////////////////////////////////
-	//
+	////////////////////////////////////////////////////////////////////////
 	//
 	// Assumptions about our inputs
+	// {{{
+	////////////////////////////////////////////////////////////////////////
 	//
 	//
-	/////////////////////////////////////////////////
 
 	always @(*)
 		`ASSUME((!i_wb_stb)||(!i_cfg_stb));
@@ -1254,10 +1402,12 @@ module	dualflexpress(i_clk, i_reset,
 	always @(posedge i_clk)
 	if ((f_past_valid)&&(!$past(i_wb_stb))||($past(o_wb_stall)))
 		assert(f_outstanding <= 1 + f_extra);
-
+	// }}}
 	////////////////////////////////////////////////////////////////////////
 	//
 	// Assumptions about i_dspi_dat
+	// {{{
+	////////////////////////////////////////////////////////////////////////
 	//
 	// 1. On output, i_dspi_dat equals the input
 	// 2. Otherwise when implementing multi-cycle clocks, i_dspi_dat only
@@ -1283,10 +1433,13 @@ module	dualflexpress(i_clk, i_reset,
 		always @(*)
 			assume(i_dspi_dat == dly_idat);
 	end endgenerate
-	//
+	// }}}
 	////////////////////////////////////////////////////////////////////////
 	//
 	// Maintenance mode assertions
+	// {{{
+	////////////////////////////////////////////////////////////////////////
+	//
 	//
 
 	always @(*)
@@ -1308,11 +1461,11 @@ module	dualflexpress(i_clk, i_reset,
 		assert(clk_ctr == 0);
 		assert(!o_wb_ack);
 	end
-
+	// }}}
 	////////////////////////////////////////////////////////////////////////
 	//
 	//
-	//
+	// {{{
 	always @(posedge i_clk)
 	if (dly_ack)
 		assert(clk_ctr[2:0] == 0);
@@ -1348,12 +1501,14 @@ module	dualflexpress(i_clk, i_reset,
 	always @(*)
 	if (cfg_mode)
 		assert(f_outstanding <= 1 + f_extra);
-
-	/////////////////
+	// }}}
+	////////////////////////////////////////////////////////////////////////
 	//
 	// Idle channel
+	// {{{
+	////////////////////////////////////////////////////////////////////////
 	//
-	/////////////////
+	//
 	always @(*)
 	if (!maintenance)
 	begin
@@ -1380,12 +1535,14 @@ module	dualflexpress(i_clk, i_reset,
 	if ((OPT_CLKDIV==1)&&(!o_dspi_cs_n)&&(!$past(o_dspi_cs_n))
 			&&(!$past(o_dspi_cs_n,2))&&(!cfg_mode))
 		assert(o_dspi_sck != $past(o_dspi_sck));
-
-	/////////////////
+	// }}}
+	////////////////////////////////////////////////////////////////////////
 	//
-	//  Read requests
+	// Read requests
+	// {{{
+	////////////////////////////////////////////////////////////////////////
 	//
-	/////////////////
+	//
 	always @(posedge i_clk)
 	if ((f_past_valid)&&(!$past(i_reset))&&($past(bus_request)))
 	begin
@@ -1443,12 +1600,14 @@ module	dualflexpress(i_clk, i_reset,
 	always @(posedge i_clk)
 	if ((OPT_CLKDIV>0)&&($past(o_dspi_cs_n)))
 		assert(o_dspi_sck);
-
-	/////////////////
+	// }}}
+	////////////////////////////////////////////////////////////////////////
 	//
-	//  User mode
+	// User mode
+	// {{{
+	////////////////////////////////////////////////////////////////////////
 	//
-	/////////////////
+	//
 	always @(*)
 	if ((maintenance)||(!OPT_CFG))
 		assert(!cfg_mode);
@@ -1474,13 +1633,21 @@ module	dualflexpress(i_clk, i_reset,
 	always @(posedge i_clk)
 	if ((i_wb_stb || i_cfg_stb) && !o_wb_stall && i_wb_we)
 		fv_data <= i_wb_data;
-
+	// }}}
+	////////////////////////////////////////////////////////////////////////
+	//
 	// Memory reads
+	// {{{
+	////////////////////////////////////////////////////////////////////////
+	//
+	//
 
+	// f_memread
+	// {{{
 	initial	f_memread = 0;
 	generate if (RDDELAY == 0)
 	begin
-
+		// {{{
 		always @(posedge i_clk)
 		if (i_reset)
 			f_memread <= 0;
@@ -1492,8 +1659,9 @@ module	dualflexpress(i_clk, i_reset,
 			if ((bus_request)&&(o_dspi_cs_n))
 				f_memread[0] <= 1'b1;
 		end
+		// }}}
 	end else begin
-
+		// {{{
 		always @(posedge i_clk)
 		if (i_reset)
 			f_memread <= 0;
@@ -1506,12 +1674,19 @@ module	dualflexpress(i_clk, i_reset,
 			if ((bus_request)&&(o_dspi_cs_n))
 				f_memread[0] <= 1'b1;
 		end
+		// }}}
 	end endgenerate
+	// }}}
 
+	// f_memread against o_dspi_sck
+	// {{{
 	always @(posedge i_clk)
 	if ((OPT_ODDR)&&(|f_memread[F_MEMDONE-1:0]))
 		assert(o_dspi_sck);
+	// }}}
 
+	// f_memread against o_dspi_mod
+	// {{{
 	always @(posedge i_clk)
 	if (|f_memread[F_MEMDONE-16-NDUMMY+4-1:0])
 		assert(o_dspi_mod == DUAL_WRITE);
@@ -1519,10 +1694,13 @@ module	dualflexpress(i_clk, i_reset,
 	// begin end
 	else if (|f_memread[F_MEMACK:F_MEMDONE-16])
 		assert(o_dspi_mod == DUAL_READ);
+	// }}}
 
+	// f_past_data
+	// {{{
 	generate if (RDDELAY > 0)
 	begin
-
+		// {{{
 		always @(posedge i_clk)
 		if ($past(ckpos,RDDELAY))
 		begin
@@ -1531,7 +1709,9 @@ module	dualflexpress(i_clk, i_reset,
 			else if ($past(o_dspi_mod,RDDELAY) == DUAL_READ)
 				f_past_data <= { f_past_data[30:0], i_dspi_dat[1:0] };
 		end
+		// }}}
 	end else begin
+		// {{{
 		always @(posedge i_clk)
 		if (ckpos)
 		begin
@@ -1540,14 +1720,19 @@ module	dualflexpress(i_clk, i_reset,
 			else if (o_dspi_mod == DUAL_READ)
 				f_past_data <= { f_past_data[30:0], i_dspi_dat[1:0] };
 		end
+		// }}}
 	end endgenerate
+	// }}}
 
+	// o_dspi_dat against f_memread, fv_addr
+	// {{{
 	always @(posedge i_clk)
 	if (|f_memread[(OPT_ODDR ? 0:1) +: 7 + (OPT_ADDR32 ? 4:0)])
 	begin
 		if (OPT_ADDR32)
 		begin
 			// Eight extra bits of address
+			// {{{
 			if (f_memread[(OPT_ODDR ? 0:1)])
 				assert(o_dspi_dat== fv_addr[29:28]);
 			if (f_memread[1 + (OPT_ODDR ? 0:1)])
@@ -1556,8 +1741,10 @@ module	dualflexpress(i_clk, i_reset,
 				assert(o_dspi_dat== fv_addr[25:24]);
 			if (f_memread[3 + (OPT_ODDR ? 0:1)])
 				assert(o_dspi_dat== fv_addr[23:22]);
+			// }}}
 		end
 		// 12 dibits of address, two dibits of mode
+		// {{{
 		if (f_memread[(OPT_ODDR ? 0:1)+(OPT_ADDR32 ? 4:0)])
 			assert(o_dspi_dat== fv_addr[21:20]);
 		if (f_memread[1+(OPT_ODDR ? 0:1)+(OPT_ADDR32 ? 4:0)])
@@ -1586,13 +1773,18 @@ module	dualflexpress(i_clk, i_reset,
 			assert(o_dspi_dat == 2'b10);
 		if (f_memread[13+(OPT_ODDR ? 0:1)+(OPT_ADDR32 ? 4:0)])
 			assert(o_dspi_dat == 2'b10);
+		// }}}
 	end
+	// }}}
 
+	// o_wb_data against i_dspi_dat (via f_past_data if necessary)
+	// {{{
 	always @(posedge i_clk)
 	if (OPT_ODDR)
 	begin
 		if (f_memread[F_MEMACK] && OPT_ENDIANSWAP)
 		begin
+			// {{{
 			assert(o_wb_data[ 7: 6] == $past(i_dspi_dat,16));
 			assert(o_wb_data[ 5: 4] == $past(i_dspi_dat,15));
 			assert(o_wb_data[ 3: 2] == $past(i_dspi_dat,14));
@@ -1609,8 +1801,10 @@ module	dualflexpress(i_clk, i_reset,
 			assert(o_wb_data[29:28] == $past(i_dspi_dat,3));
 			assert(o_wb_data[27:26] == $past(i_dspi_dat,2));
 			assert(o_wb_data[25:24] == $past(i_dspi_dat,1));
+			// }}}
 		end else if (f_memread[F_MEMACK])
 		begin
+			// {{{
 			assert(o_wb_data[31:30] == $past(i_dspi_dat,16));
 			assert(o_wb_data[29:28] == $past(i_dspi_dat,15));
 			assert(o_wb_data[27:26] == $past(i_dspi_dat,14));
@@ -1627,48 +1821,72 @@ module	dualflexpress(i_clk, i_reset,
 			assert(o_wb_data[ 5: 4] == $past(i_dspi_dat, 3));
 			assert(o_wb_data[ 3: 2] == $past(i_dspi_dat, 2));
 			assert(o_wb_data[ 1: 0] == $past(i_dspi_dat, 1));
+			// }}}
 		end else if (|f_memread)
 		begin
+			// {{{
 			if (!OPT_PIPE)
 				assert(o_wb_stall);
 			else if (!f_memread[F_MEMDONE-1])
 				assert(o_wb_stall);
 			assert(!o_wb_ack);
+			// }}}
 		end
 	end else if (f_memread[F_MEMACK] && OPT_ENDIANSWAP)
+		// {{{
 		assert((!o_wb_ack)||(
 			   o_wb_data[ 7: 0] == f_past_data[31:24]
 			&& o_wb_data[15: 8] == f_past_data[23:16]
 			&& o_wb_data[23:16] == f_past_data[15: 8]
 			&& o_wb_data[31:24] == f_past_data[ 7: 0]));
+		// }}}
 	else if (f_memread[F_MEMACK]) // 25
 		assert((!o_wb_ack)||(o_wb_data == f_past_data[31:0]));
 	else if (|f_memread)
 	begin
+		// {{{
 		if ((!OPT_PIPE)||(!ckstb))
 			assert(o_wb_stall);
 		else if (!f_memread[F_MEMDONE-1])
 			assert(o_wb_stall);
 		assert(!o_wb_ack);
+		// }}}
 	end
+	// }}}
 
+	// clk_ctr against f_memread
+	// {{{
 	always @(posedge i_clk)
 	if (f_memread[F_MEMDONE])
 		assert((clk_ctr == 0)||((OPT_PIPE)&&(clk_ctr == F_PIPEDONE)));
 	// else if (|f_memread[F_MEMDONE-1:0])
 	//	assert(f_memread[F_MEMDONE-clk_ctr]);
+	// }}}
 
+	// f_memread internal check(s)
+	// {{{
 	generate for(k=0; k<F_MEMACK-1; k=k+1)
 	begin : ONEHOT_MEMREAD
 		always @(*)
 		if (f_memread[k])
 			assert((f_memread ^ (1<<k)) == 0);
 	end endgenerate
+	// }}}
 
+	// }}}
+	////////////////////////////////////////////////////////////////////////
+	//
+	// Pipelined memory reads
+	// {{{
+	////////////////////////////////////////////////////////////////////////
+	//
+	//
 
+	// f_piperead
+	// {{{
 	generate if (RDDELAY == 0)
 	begin
-
+		// {{{
 		initial	f_piperead = 0;
 		always @(posedge i_clk)
 		if ((i_reset)||(!OPT_PIPE))
@@ -1678,9 +1896,9 @@ module	dualflexpress(i_clk, i_reset,
 			f_piperead[0] <= (bus_request)&&(!o_dspi_cs_n);
 		end else if (!OPT_ODDR)
 			f_piperead[F_PIPEACK] <= 1'b0;
-
+		// }}}
 	end else begin
-
+		// {{{
 		initial	f_piperead = 0;
 		always @(posedge i_clk)
 		if ((i_reset)||(!OPT_PIPE))
@@ -1690,14 +1908,18 @@ module	dualflexpress(i_clk, i_reset,
 			f_piperead[0] <= (bus_request)&&(!o_dspi_cs_n);
 		end else if (!OPT_ODDR)
 			f_piperead[F_PIPEACK:F_PIPEDONE] <= { f_piperead[F_PIPEACK-1:F_PIPEDONE], 1'b0 };
-
+		// }}}
 	end endgenerate
+	// }}}
 
+	// o_wb_data against f_piperead, i_dspi_dat and f_past_data
+	// {{{
 	always @(posedge  i_clk)
 	if (OPT_ODDR)
 	begin
 		if (f_piperead[F_PIPEACK] && OPT_ENDIANSWAP)
 		begin
+			// {{{
 			assert(o_wb_data[ 7: 6] == $past(i_dspi_dat,16));
 			assert(o_wb_data[ 5: 4] == $past(i_dspi_dat,15));
 			assert(o_wb_data[ 3: 2] == $past(i_dspi_dat,14));
@@ -1714,8 +1936,10 @@ module	dualflexpress(i_clk, i_reset,
 			assert(o_wb_data[29:28] == $past(i_dspi_dat,3));
 			assert(o_wb_data[27:26] == $past(i_dspi_dat,2));
 			assert(o_wb_data[25:24] == $past(i_dspi_dat,1));
+			// }}}
 		end else if (f_piperead[F_PIPEACK])
 		begin
+			// {{{
 			assert(o_wb_data[31:30] == $past(i_dspi_dat,16));
 			assert(o_wb_data[29:28] == $past(i_dspi_dat,15));
 			assert(o_wb_data[27:26] == $past(i_dspi_dat,14));
@@ -1732,33 +1956,49 @@ module	dualflexpress(i_clk, i_reset,
 			assert(o_wb_data[ 5: 4] == $past(i_dspi_dat, 3));
 			assert(o_wb_data[ 3: 2] == $past(i_dspi_dat, 2));
 			assert(o_wb_data[ 1: 0] == $past(i_dspi_dat, 1));
+			// }}}
 		end else if ((|f_piperead)&&(!f_piperead[RDDELAY]))
 			assert(!o_wb_ack);
 	end else if (f_piperead[F_PIPEACK] && OPT_ENDIANSWAP)
 	begin
+		// {{{
 		assert((!o_wb_ack)||(
 			   o_wb_data[ 7: 0] == f_past_data[31:24]
 			&& o_wb_data[15: 8] == f_past_data[23:16]
 			&& o_wb_data[23:16] == f_past_data[15: 8]
 			&& o_wb_data[31:24] == f_past_data[ 7: 0]));
+		// }}}
 	end else if (f_piperead[F_PIPEACK]) // 25
 		assert((!o_wb_ack)||(o_wb_data == f_past_data[31:0]));
 	else if (|f_piperead)
 	begin
+		// {{{
 		if ((!OPT_PIPE)||(!ckstb))
 			assert(o_wb_stall);
 		else if (!f_piperead[F_PIPEDONE-1])
 			assert(o_wb_stall);
 		if (!f_memread[F_MEMACK])
 			assert(!o_wb_ack);
+		// }}}
 	end
+	// }}}
 
+	// clk_ctr against f_piperead
+	// {{{
 	always @(posedge i_clk)
 	if (f_piperead[F_PIPEDONE])
 		assert(clk_ctr == 0 || clk_ctr == F_PIPEDONE);
 	else if (|f_piperead[F_PIPEDONE-1:0])
 		assert(f_piperead[F_PIPEDONE-clk_ctr]);
-
+	// }}}
+	// }}}
+	////////////////////////////////////////////////////////////////////////
+	//
+	// Internal config pipe checks
+	// {{{
+	////////////////////////////////////////////////////////////////////////
+	//
+	//
 	always @(*)
 	if (i_cfg_stb && !o_wb_stall)
 	begin
@@ -1771,10 +2011,17 @@ module	dualflexpress(i_clk, i_reset,
 		else if (cfg_hs_read)
 			assert({ cfg_ls_write }==0);
 	end
+	// }}}
 	////////////////////////////////////////////////////////////////////////
 	//
 	// Lowspeed config write
+	// {{{
+	////////////////////////////////////////////////////////////////////////
 	//
+	//
+
+	// f_cfglswrite
+	// {{{
 	initial	f_cfglswrite = 0;
 	always @(posedge i_clk)
 	if (i_reset)
@@ -1788,7 +2035,10 @@ module	dualflexpress(i_clk, i_reset,
 		if (cfg_ls_write)
 			f_cfglswrite[0] <= 1'b1;
 	end
+	// }}}
 
+	// o_dspi_sck against f_cfglswrite
+	// {{{
 	always @(*)
 	if (OPT_ODDR)
 	begin
@@ -1797,7 +2047,10 @@ module	dualflexpress(i_clk, i_reset,
 		else if (|f_cfglswrite)
 			assert(!o_dspi_sck);
 	end
+	// }}}
 
+	// o_dspi_dat against f_cfglswrite
+	// {{{
 	always @(posedge i_clk)
 	if (|f_cfglswrite[7:0])
 	begin
@@ -1843,21 +2096,31 @@ module	dualflexpress(i_clk, i_reset,
 			assert(clk_ctr == 1);
 		end
 	end
+	// }}}
 
+	// f_cfglswrite against o_dspi_cs_n and o_dspi_mod
+	// {{{
 	always @(posedge i_clk)
 	if (|f_cfglswrite)
 	begin
 		assert(!o_dspi_cs_n);
 		assert(o_dspi_mod == NORMAL_SPI);
 	end
+	// }}}
 
+	// f_cfglswrite against o_dspi_sck
+	// {{{
 	always @(posedge i_clk)
 	if (|f_cfglswrite[F_CFGLSACK:F_CFGLSDONE])
 		assert(o_dspi_sck == !OPT_ODDR);
+	// }}}
 
+	// o_wb_data against i_dspi_dat and f_cfglswrite
+	// {{{
 	always @(posedge i_clk)
 	if ((OPT_ODDR)&&(f_cfglswrite[F_CFGLSACK]))
 	begin
+		// {{{
 		assert((o_wb_ack)||(!$past(pre_ack))||(!$past(i_wb_cyc)));
 		assert(o_wb_data[7] == $past(i_dspi_dat[1],8));
 		assert(o_wb_data[6] == $past(i_dspi_dat[1],7));
@@ -1868,17 +2131,26 @@ module	dualflexpress(i_clk, i_reset,
 		assert(o_wb_data[1] == $past(i_dspi_dat[1],2));
 		assert(o_wb_data[0] == $past(i_dspi_dat[1],1));
 		assert(!o_wb_stall);
+		// }}}
 	end else if (f_cfglswrite[F_CFGLSACK])
 		assert(o_wb_data[7:0] == f_past_data[7:0]);
 	else if (|f_cfglswrite[F_CFGLSACK-1:0])
 		assert(o_wb_stall);
-
+	// }}}
+	// }}}
 	////////////////////////////////////////////////////////////////////////
 	//
 	// High speed config write
+	// {{{
+	////////////////////////////////////////////////////////////////////////
 	//
+	//
+
+	// f_cfghswrite
+	// {{{
 	generate if (RDDELAY == 0)
 	begin
+		// {{{
 		initial	f_cfghswrite = 0;
 		always @(posedge i_clk)
 		if (i_reset)
@@ -1891,9 +2163,9 @@ module	dualflexpress(i_clk, i_reset,
 			if (cfg_hs_write)
 				f_cfghswrite[0] <= 1'b1;
 		end
-
+		// }}}
 	end else begin
-
+		// {{{
 		initial	f_cfghswrite = 0;
 		always @(posedge i_clk)
 		if (i_reset)
@@ -1907,8 +2179,12 @@ module	dualflexpress(i_clk, i_reset,
 			if (cfg_hs_write)
 				f_cfghswrite[0] <= 1'b1;
 		end
+		// }}}
 	end endgenerate
+	// }}}
 
+	// o_dspi_sck against f_cfghswrite
+	// {{{
 	always @(*)
 	if (OPT_ODDR)
 	begin
@@ -1921,11 +2197,14 @@ module	dualflexpress(i_clk, i_reset,
 	always @(posedge i_clk)
 	if (|f_cfghswrite[F_CFGHSACK:F_CFGHSDONE])
 		assert(o_dspi_sck == !OPT_ODDR);
+	// }}}
 
-
+	// o_dspi_dat against i_wb_data && f_cfghswrite
+	// {{{
 	always @(posedge i_clk)
 	if (OPT_ODDR)
 	begin
+		// {{{
 		if (f_cfghswrite[0])
 			assert(o_dspi_dat == $past(i_wb_data[7:6]));
 		else if (f_cfghswrite[1])
@@ -1934,7 +2213,9 @@ module	dualflexpress(i_clk, i_reset,
 			assert(o_dspi_dat == $past(i_wb_data[3:2],3));
 		else if (f_cfghswrite[3])
 			assert(o_dspi_dat == $past(i_wb_data[1:0],4));
+		// }}}
 	end else begin
+		// {{{
 		if (f_cfghswrite[1])
 			assert(o_dspi_dat == fv_data[7:6]);
 		else if (f_cfghswrite[2])
@@ -1943,8 +2224,12 @@ module	dualflexpress(i_clk, i_reset,
 			assert(o_dspi_dat == fv_data[3:2]);
 		else if (f_cfghswrite[4])
 			assert(o_dspi_dat == fv_data[1:0]);
+		// }}}
 	end
+	// }}}
 
+	// o_dspi_sck against f_cfghswrite
+	// {{{
 	always @(posedge i_clk)
 	if (OPT_ODDR)
 	begin
@@ -1953,7 +2238,10 @@ module	dualflexpress(i_clk, i_reset,
 		else if (|f_cfghswrite)
 			assert(!o_dspi_sck);
 	end
+	// }}}
 
+	// actual_sck against f_cfghswrite
+	// {{{
 	generate if (RDDELAY > 0)
 	begin
 
@@ -1962,21 +2250,30 @@ module	dualflexpress(i_clk, i_reset,
 			assert(!actual_sck);
 
 	end endgenerate
+	// }}}
 
+	// o_dspi_cs_n, o_dspi_mod again st f_cfghswrite
+	// {{{
 	always @(posedge i_clk)
 	if (|f_cfghswrite)
 	begin
 		assert(!o_dspi_cs_n);
 		assert(o_dspi_mod == DUAL_WRITE);
 	end
+	// }}}
 
+	// dly_ack, o_wb_stall against f_cfghswrite
+	// {{{
 	always @(posedge i_clk)
 	if (|f_cfghswrite[3:0])
 	begin
 		assert(!dly_ack);
 		assert(o_wb_stall);
 	end
+	// }}}
 
+	// o_wb_ack, o_dspi_mod, o_wb_stall against f_cfghswrite
+	// {{{
 	always @(posedge i_clk)
 	if (f_cfghswrite[F_CFGHSACK])
 	begin
@@ -1988,11 +2285,19 @@ module	dualflexpress(i_clk, i_reset,
 		assert(o_wb_stall);
 		assert(!o_wb_ack);
 	end
+	// }}}
 
+	// }}}
 	////////////////////////////////////////////////////////////////////////
 	//
 	// High speed config read
+	// {{{
+	////////////////////////////////////////////////////////////////////////
 	//
+	//
+
+	// f_cfghsread
+	// {{{	
 	initial	f_cfghsread = 0;
 	always @(posedge i_clk)
 	if (i_reset)
@@ -2006,7 +2311,10 @@ module	dualflexpress(i_clk, i_reset,
 		if (cfg_hs_read)
 			f_cfghsread[0] <= 1'b1;
 	end
+	// }}}
 
+	// o_dspi_sck against f_cfghsread
+	// {{{
 	always @(*)
 	if (OPT_ODDR)
 	begin
@@ -2019,11 +2327,10 @@ module	dualflexpress(i_clk, i_reset,
 	always @(posedge i_clk)
 	if (|f_cfghsread[F_CFGHSACK:F_CFGHSDONE])
 		assert(o_dspi_sck == !OPT_ODDR);
+	// }}}
 
-	always @(*)
-	if ((!maintenance)&&(o_dspi_cs_n))
-		assert(!actual_sck);
-
+	// dly_ack, o_dspi_cs_n, o_dspi_mod, o_wb_stall against f_cfghsread
+	// {{{
 	always @(posedge i_clk)
 	if (|f_cfghsread[F_CFGHSDONE-1:F_CFGHSDONE-4])
 	begin
@@ -2032,6 +2339,11 @@ module	dualflexpress(i_clk, i_reset,
 		assert(o_dspi_mod == DUAL_READ);
 		assert(o_wb_stall);
 	end
+	// }}}
+
+	always @(*)
+	if ((!maintenance)&&(o_dspi_cs_n))
+		assert(!actual_sck);
 
 	generate if (RDDELAY > 0)
 	begin
@@ -2042,16 +2354,19 @@ module	dualflexpress(i_clk, i_reset,
 
 	end endgenerate
 
-
+	// o_wb_data against f_cfghsread
+	// {{{
 	always @(posedge i_clk)
 	if (f_cfghsread[F_CFGHSACK])
 	begin
 		if (OPT_ODDR)
 		begin
+			// {{{
 			assert(o_wb_data[7:6] == $past(i_dspi_dat[1:0],4));
 			assert(o_wb_data[5:4] == $past(i_dspi_dat[1:0],3));
 			assert(o_wb_data[3:2] == $past(i_dspi_dat[1:0],2));
 			assert(o_wb_data[1:0] == $past(i_dspi_dat[1:0],1));
+			// }}}
 		end
 		assert(o_wb_data[7:0] == f_past_data[7:0]);
 		assert((o_wb_ack)||(!$past(pre_ack))||(!$past(i_wb_cyc)));
@@ -2062,10 +2377,14 @@ module	dualflexpress(i_clk, i_reset,
 		assert(o_wb_stall);
 		assert(!o_wb_ack);
 	end
+	// }}}
 
+	// }}}
 	////////////////////////////////////////////////////////////////////////
 	//
 	// Crossover checks
+	// {{{
+	////////////////////////////////////////////////////////////////////////
 	//
 	wire	f_dspi_not_done, f_dspi_not_ackd, f_dspi_active, f_dspi_ack;
 	assign	f_dspi_not_done =
@@ -2172,12 +2491,11 @@ module	dualflexpress(i_clk, i_reset,
 			|| f_cfghswrite[F_CFGHSACK]
 			|| f_cfghsread[F_CFGHSACK]);
 	end
-
-
+	// }}}
 	////////////////////////////////////////////////////////////////////////
 	//
 	// Cover Properties
-	//
+	// {{{
 	////////////////////////////////////////////////////////////////////////
 	//
 	// Due to the way the chip starts up, requiring 32k+ maintenance clocks,
@@ -2185,6 +2503,7 @@ module	dualflexpress(i_clk, i_reset,
 
 	generate if (!OPT_STARTUP)
 	begin
+		// {{{
 		// Why is this generate only if !OPT_STARTUP?  For performance
 		// reasons.  The startup sequence can take a great many clocks.
 		// cover() would never be able to work through all of those
@@ -2196,6 +2515,7 @@ module	dualflexpress(i_clk, i_reset,
 
 		if (OPT_CFG)
 		begin
+			// {{{
 			always @(posedge i_clk)
 			begin
 			cover(cfg_ls_write);
@@ -2230,6 +2550,7 @@ module	dualflexpress(i_clk, i_reset,
 			cover(o_wb_ack && f_cfghsread[ F_CFGHSACK]);
 			cover(o_wb_ack && f_cfghswrite[F_CFGHSACK]);
 			end
+			// }}}
 		end
 
 		if (OPT_PIPE)
@@ -2237,15 +2558,17 @@ module	dualflexpress(i_clk, i_reset,
 			always @(posedge i_clk)
 				cover(o_wb_ack && f_piperead[F_PIPEACK]);
 		end
-		//
+		// }}}
 	end else begin
-
+		// {{{
+		// Otherwise cover exiting from maintenance mode
 		always @(posedge i_clk)
 			cover(!maintenance);
-
+		// }}}
 	end endgenerate
-
+	// }}}
 `endif
+// }}}
 endmodule
 // Originally:			   (XPRS)		wbqspiflash
 //				(NOCFG)	(XPRS) (PIPE)  (R/O)	(FULL)

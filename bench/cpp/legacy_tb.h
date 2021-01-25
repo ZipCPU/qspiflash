@@ -1,7 +1,7 @@
 ////////////////////////////////////////////////////////////////////////////////
 //
 // Filename:	legacy_tb.cpp
-//
+// {{{
 // Project:	A Set of Wishbone Controlled SPI Flash Controllers
 //
 // Purpose:	To provide a fairly generic interface wrapper to a wishbone bus,
@@ -11,9 +11,9 @@
 //		Gisselquist Technology, LLC
 //
 ////////////////////////////////////////////////////////////////////////////////
-//
-// Copyright (C) 2015-2019, Gisselquist Technology, LLC
-//
+// }}}
+// Copyright (C) 2015-2021, Gisselquist Technology, LLC
+// {{{
 // This file is part of the set of Wishbone controlled SPI flash controllers
 // project
 //
@@ -31,14 +31,15 @@
 // along with this program.  (It's in the $(ROOT)/doc directory.  Run make
 // with no target there if the PDF file isn't present.)  If not, see
 // <http://www.gnu.org/licenses/> for a copy.
-//
+// }}}
 // License:	LGPL, v3, as defined and found on www.gnu.org,
+// {{{
 //		http://www.gnu.org/licenses/lgpl.html
 //
 //
 ////////////////////////////////////////////////////////////////////////////////
 //
-//
+// }}}
 #include <stdio.h>
 
 #include <verilated.h>
@@ -54,22 +55,27 @@ public:
 	bool	m_bomb;
 
 	WBFLASH_TB(void) {
+		// {{{
 		m_bomb = false;
 		m_ack_expected = false;
 		TESTB<VA>::m_core->i_wb_cyc = 0;
 		TESTB<VA>::m_core->i_wb_data_stb = 0;
 		TESTB<VA>::m_core->i_wb_ctrl_stb = 0;
+		// }}}
 	}
 
 #define	TICK	tick
 	virtual	void	tick(void) {
+		// {{{
 		// printf("WB-TICK\n");
 		TESTB<VA>::tick();
 		assert((TESTB<VA>::m_core->i_wb_cyc)
 			||(!TESTB<VA>::m_core->o_wb_ack));
+		// }}}
 	}
 
 	unsigned wb_ctrl_read(unsigned a) {
+		// {{{
 		int		errcount = 0;
 		unsigned	result;
 
@@ -119,9 +125,11 @@ public:
 		// assert(!TESTB<VA>::m_core->o_wb_stall);
 
 		return result;
+		// }}}
 	}
 
 	unsigned wb_read(unsigned a) {
+		// {{{
 		int		errcount = 0;
 		unsigned	result;
 
@@ -173,9 +181,11 @@ public:
 			TICK();
 
 		return result;
+		// }}}
 	}
 
 	void	wb_read(unsigned a, int len, unsigned *buf, const int inc=1) {
+		// {{{
 		int		errcount = 0;
 		int		THISBOMBCOUNT = BOMBCOUNT * len;
 		int		cnt, rdidx;
@@ -236,9 +246,11 @@ public:
 		}
 		TICK();
 		assert(!TESTB<VA>::m_core->o_wb_ack);
+		// }}}
 	}
 
 	void	wb_ctrl_write(unsigned a, unsigned v) {
+		// {{{
 		int errcount = 0;
 
 		printf("WB-WRITEM(%08x) <= %08x\n", a, v);
@@ -278,9 +290,11 @@ public:
 
 		while(TESTB<VA>::m_core->o_wb_stall)
 			TICK();
+		// }}}
 	}
 
 	void	wb_write(unsigned a, unsigned v) {
+		// {{{
 		int errcount = 0;
 
 		printf("WB-WRITEM(%08x) <= %08x\n", a, v);
@@ -321,9 +335,11 @@ public:
 		while(TESTB<VA>::m_core->o_wb_stall)
 			TICK();
 		assert(!TESTB<VA>::m_core->o_wb_stall);
+		// }}}
 	}
 
 	void	wb_write(unsigned a, unsigned int ln, unsigned *buf, const int inc=1) {
+		// {{{
 		unsigned errcount = 0, nacks = 0;
 
 		printf("WB-WRITEM(%08x, %d, ...)\n", a, ln);
@@ -379,6 +395,7 @@ public:
 		// assert(!TESTB<VA>::m_core->o_wb_stall);
 		while(TESTB<VA>::m_core->o_wb_stall)
 			TICK();
+		// }}}
 	}
 
 	bool	bombed(void) const { return m_bomb; }

@@ -1,7 +1,7 @@
 ////////////////////////////////////////////////////////////////////////////////
 //
 // Filename: 	qflexpress_tb.cpp
-//
+// {{{
 // Project:	A Set of Wishbone Controlled SPI Flash Controllers
 //
 // Purpose:	To determine whether or not the qflexpress (SPI+QSPI only)
@@ -14,9 +14,9 @@
 //		Gisselquist Technology, LLC
 //
 ////////////////////////////////////////////////////////////////////////////////
-//
-// Copyright (C) 2015-2016,2018-2019 Gisselquist Technology, LLC
-//
+// }}}
+// Copyright (C) 2015-2021, Gisselquist Technology, LLC
+// {{{
 // This file is part of the set of Wishbone controlled SPI flash controllers
 // project
 //
@@ -34,14 +34,15 @@
 // along with this program.  (It's in the $(ROOT)/doc directory.  Run make
 // with no target there if the PDF file isn't present.)  If not, see
 // <http://www.gnu.org/licenses/> for a copy.
-//
+// }}}
 // License:	LGPL, v3, as defined and found on www.gnu.org,
+// {{{
 //		http://www.gnu.org/licenses/lgpl.html
 //
 //
 ////////////////////////////////////////////////////////////////////////////////
 //
-//
+// }}}
 #include "verilated.h"
 #include "Vqflexpress.h"
 #include "byteswap.h"
@@ -93,9 +94,11 @@ class	QFLEXPRESS_TB : public PARENT {
 public:
 
 	QFLEXPRESS_TB(void) {
+		// {{{
 		m_core = new Vqflexpress;
 		m_flash= new FLASHSIM;
 		m_flash->debug(true);
+		// }}}
 	}
 
 	unsigned operator[](const int index) { return (*m_flash)[index]; }
@@ -111,6 +114,7 @@ public:
 	}
 
 	void	tick(void) {
+		// {{{
 		bool	writeout = false;
 
 		{ static int lastsck = 0; int iqspi;
@@ -155,18 +159,22 @@ public:
 		}
 
 		PARENT::tick();
+		// }}}
 	}
 
 	bool	bombed(void) const { return m_bomb; }
 
 	void	take_offline(void) {
+		// {{{
 		cfg_write(F_END);
 		cfg_write(F_RESET);
 		cfg_write(F_RESET);
 		cfg_write(F_END);
+		// }}}
 	}
 
 	void	place_online(void) {
+		// {{{
 		static	const	uint32_t QUAL_IO_READ = CFG_USERMODE|0xeb;
 		cfg_write(QUAL_IO_READ);
 		// 3 address bytes
@@ -179,9 +187,11 @@ public:
 		cfg_write(CFG_USERMODE | CFG_QSPEED);
 		// Close the interface
 		cfg_write(0);
+		// }}}
 	}
 
 	unsigned flreadid(void) {
+		// {{{
 		unsigned	r;
 
 		cfg_write(F_READID);
@@ -193,9 +203,11 @@ public:
 		cfg_write(F_END);
 
 		return r;
+		// }}}
 	}
 
 	int	flstatus(void) {
+		// {{{
 		unsigned	v;
 
 		cfg_write(F_RDSR);
@@ -203,9 +215,11 @@ public:
 		v = cfg_read()  & 0x0ff;
 		cfg_write(F_END);
 		return v;
+		// }}}
 	}
 
 	void	flwait(void) {
+		// {{{
 		int	r;
 
 		printf("Waiting for the erase/program cycle to complete\n");
@@ -216,9 +230,11 @@ public:
 		} while (r & 1); // Wait while the device is busy
 		cfg_write(F_END);
 		printf(" ... Completed!\n");
+		// }}}
 	}
 
 	void	flerase(unsigned sectoraddr) {
+		// {{{
 		take_offline();
 
 		cfg_write(F_END);
@@ -234,9 +250,11 @@ public:
 		flwait();
 
 		place_online();
+		// }}}
 	}
 
 	void	flpage_program(int addr, int ln, const char *buf) {
+		// {{{
 		flwait();
 
 		printf("Page program, address = %06x, ln = %d\n", addr, ln);
@@ -263,9 +281,11 @@ public:
 		flwait();
 
 		tick();
+		// }}}
 	}
 
 	void	flprogram(int addr, int ln, const char *buf) {
+		// {{{
 		int	start = addr;
 
 		take_offline();
@@ -284,6 +304,7 @@ public:
 		flwait();
 
 		place_online();
+		// }}}
 	}
 };
 

@@ -16,7 +16,7 @@
 //
 ////////////////////////////////////////////////////////////////////////////////
 //
-// Copyright (C) 2015,2017-2019, Gisselquist Technology, LLC
+// Copyright (C) 2015-2021, Gisselquist Technology, LLC
 //
 // This file is part of the set of Wishbone controlled SPI flash controllers
 // project
@@ -75,8 +75,10 @@ static	const unsigned
 	// tPP    = 1200 * MICROSECONDS,
 	// tSE    = 1500 * MILLISECONDS;
 
-FLASHSIM::FLASHSIM(const int lglen, bool debug) : m_debug(debug),
-			CKDELAY(0), RDDELAY(2), NDUMMY(4) {
+FLASHSIM::FLASHSIM(const int lglen, bool debug,
+		const int rddelay, const int ndummy)
+			: m_debug(debug), CKDELAY(0),
+			RDDELAY(rddelay), NDUMMY(ndummy) {
 	m_membytes = (1<<lglen);
 	m_memmask = (m_membytes - 1);
 	m_mem = new char[m_membytes];
@@ -117,8 +119,15 @@ void	FLASHSIM::load(const unsigned addr, const char *fname) {
 		perror("O/S Err:");
 	}
 
-	for(unsigned i=nr; i<m_membytes; i++)
+	for(unsigned i=nr+addr; i<m_membytes; i++)
 		m_mem[i] = 0x0ff;
+
+	if (m_debug && addr == 0 && nr > 16) {
+		fprintf(stderr, "FLASH LOAD: ");
+		for(unsigned i=0; i<16; i++)
+			fprintf(stderr, "%02x ", m_mem[i]);
+		fprintf(stderr, "\n");
+	}
 }
 
 void	FLASHSIM::load(const uint32_t offset, const char *data,
@@ -366,6 +375,12 @@ int	FLASHSIM::operator()(const int csn, const int sck, const int dat) {
 			// This is a NOOP command
 			QOREG(0);
 			break;
+		case 0x61: // Write enhanced volatile configuration register
+			m_state = QSPIF_IDLE;
+			if (m_debug) printf("FLASHSIM: WRITING ENHANCED VOLATILE-CONFIGURATION-REG");
+			// We'll treat this as a NOOP command--for now
+			QOREG(0);
+			break;
 		case 0x70: // Read flag status register register
 			m_state = QSPIF_IDLE;
 			if (m_debug) printf("FLASHSIM: READING FLAG-STATUS REGISTER\n");
@@ -422,8 +437,9 @@ int	FLASHSIM::operator()(const int csn, const int sck, const int dat) {
 			m_state = QSPIF_QUAD_READ_CMD;
 			m_mode = FM_QSPI;
 			break;
-		case 0x000:
-		case 0x0ff:
+		case 0x000:	// Dummy implementation of CMD 8'h00
+		case 0x031:	// Dummy implementation of CMD 8'h31
+		case 0x0ff:	// Dummy implementation of CMD 8'hff
 			m_state = QSPIF_IDLE;
 			m_mode = FM_SPI;
 			break;
@@ -541,7 +557,9 @@ int	FLASHSIM::operator()(const int csn, const int sck, const int dat) {
 			} else if (m_count == 32+8) {
 				m_mode_byte = (m_ireg) & 0x0ff;
 				if (m_debug) printf("QSPI: MODE BYTE = %02x\n", m_mode_byte);
-			} else if ((m_count > 32+8+NDUMMY)&&(0 == (m_sreg&0x01))) {
+				if (NDUMMY == 2)
+					QOREG(m_mem[m_addr++]);
+			} else if ((m_count > 32+4*NDUMMY)&&(0 == (m_sreg&0x01))) {
 				QOREG(m_mem[m_addr++]);
 				// printf("QSPIF[%08x]/QR = %02x\n",
 					// m_addr-1, m_oreg);
@@ -559,6 +577,10 @@ int	FLASHSIM::operator()(const int csn, const int sck, const int dat) {
 			if (m_count == 24+4*2) {
 				m_mode_byte = (m_ireg & 0x0ff);
 				if (m_debug) printf("QSPI/QR: MODE BYTE = %02x\n", m_mode_byte);
+				if (NDUMMY == 2) {
+					QOREG(m_mem[m_addr++]);
+					if (m_debug) printf("QSPIF[%08x]/QR = %02x\n", m_addr-1, m_oreg & 0x0ff);
+				}
 			} else if ((m_count >= 24+4*NDUMMY)&&(0 == (m_sreg&0x01))) {
 				QOREG(m_mem[m_addr++]);
 				// if (m_debug) printf("QSPIF[%08x]/QR = %02x\n", m_addr-1, m_oreg & 0x0ff);
@@ -666,8 +688,8 @@ int	FLASHSIM::simtick(const int csn, const int sck, const int dat,
 			case 5:		printf(" (DDO)");	break;
 			} printf(",%d",mod);
 
-			printf(" -- %d %d",
-				CKDELAY, (m_ckdelay != NULL) ? m_ckdelay[0] : -2);
+			if (m_ckdelay != NULL)
+				printf(" -- %d %d", CKDELAY, m_ckdelay[0]);
 			printf("\n");
 		}
 	}

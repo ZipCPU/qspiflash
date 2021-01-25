@@ -1,7 +1,7 @@
 ################################################################################
 ##
 ## Filename:	Makefile
-##
+## {{{
 ## Project:	A Set of Wishbone Controlled SPI Flash Controllers
 ##
 ## Purpose:	To direct the formal verification of the quad-spi flash
@@ -11,9 +11,9 @@
 ##		Gisselquist Technology, LLC
 ##
 ################################################################################
-##
-## Copyright (C) 2017-2019, Gisselquist Technology, LLC
-##
+## }}}
+## Copyright (C) 2017-2021, Gisselquist Technology, LLC
+## {{{
 ## This file is part of the set of Wishbone controlled SPI flash controllers
 ## project
 ##
@@ -27,18 +27,19 @@
 ## warranty of MERCHANTIBILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 ## GNU Lesser General Public License for more details.
 ##
-## You should have received a copy of the GNU Lesser General Public License along
-## with this program.  (It's in the $(ROOT)/doc directory.  Run make with no
-## target there if the PDF file isn't present.)  If not, see
+## You should have received a copy of the GNU Lesser General Public License
+## along with this program.  (It's in the $(ROOT)/doc directory.  Run make with
+## no target there if the PDF file isn't present.)  If not, see
 ## <http://www.gnu.org/licenses/> for a copy.
-##
+## }}}
 ## License:	LGPL, v3, as defined and found on www.gnu.org,
+## {{{
 ##		http://www.gnu.org/licenses/lgpl.html
 ##
 ##
 ################################################################################
 ##
-##
+## }}}
 TESTS := spi dspi qspi spixpress dualflexpress qflexpress
 .PHONY: $(TESTS)
 all: $(TESTS)
@@ -65,14 +66,17 @@ $(LLQSPI).smt2: $(RTL)/$(LLQSPI).v $(LLQSPI).ys
 	$(YOSYS) -ql $(LLQSPI).yslog -s $(LLQSPI).ys
 
 $(LLQSPI) : $(LLQSPI).check
+## {{{
 $(LLQSPI).check: $(LLQSPI).smt2
 	@rm -f $(LLQSPI).check
 	$(SMTBMC)    $(BMCARGS) -t 88 --dump-vcd $(LLQSPI).vcd $(LLQSPI).smt2
 	$(SMTBMC) -g $(BMCARGS) -t 88 --dump-vcd $(LLQSPI).vcd $(LLQSPI).smt2
 	$(SMTBMC)    $(INDARGS) -t 86 --dump-vcd $(LLQSPI).vcd $(LLQSPI).smt2
 	touch $(LLQSPI).check
+## }}}
 
 .PHONY: $(SPIX)
+## {{{
 $(SPIX) : $(SPIX)_safety/PASS $(SPIX)_safety_pipe/PASS $(SPIX)_safety_nocfg/PASS
 $(SPIX) : $(SPIX)_safety_pipe_nocfg/PASS $(SPIX)_cover/PASS $(SPIX)_cover_pipe/PASS
 $(SPIX)_safety/PASS:       $(SPIX).sby $(RTL)/$(SPIX).v $(WB)
@@ -87,8 +91,10 @@ $(SPIX)_cover/PASS: $(SPIX).sby $(RTL)/$(SPIX).v $(WB)
 	sby -f $(SPIX).sby cover
 $(SPIX)_cover_pipe/PASS: $(SPIX).sby $(RTL)/$(SPIX).v $(WB)
 	sby -f $(SPIX).sby cover_pipe
+## }}}
 
 .PHONY: $(DSPI)
+## {{{
 $(DSPI) : $(DSPI)_bare/PASS      $(DSPI)_barep/PASS      $(DSPI)_barecfg/PASS
 $(DSPI) : $(DSPI)_cfgonly/PASS
 $(DSPI) : $(DSPI)_ice40/PASS     $(DSPI)_ice40c/PASS     $(DSPI)_ice40s/PASS
@@ -164,8 +170,10 @@ $(DSPI)_barecfgswp/PASS: $(DSPI).sby $(RTL)/$(DSPI).v $(WB)
 	sby -f $(DSPI).sby barecfgswp
 $(DSPI)_cfgonlyswp/PASS: $(DSPI).sby $(RTL)/$(DSPI).v $(WB)
 	sby -f $(DSPI).sby cfgonlyswp
+## }}}
 
 .PHONY: $(QSPI)
+## {{{
 $(QSPI) : $(QSPI)_bare/PASS      $(QSPI)_barep/PASS      $(QSPI)_barecfg/PASS
 $(QSPI) : $(QSPI)_cfgonly/PASS
 $(QSPI) : $(QSPI)_ice40/PASS     $(QSPI)_ice40c/PASS     $(QSPI)_ice40s/PASS
@@ -236,9 +244,12 @@ $(QSPI)_x32c/PASS:       $(QSPI).sby $(RTL)/$(QSPI).v
 	sby -f $(QSPI).sby x32c
 $(QSPI)_x32swap/PASS:    $(QSPI).sby $(RTL)/$(QSPI).v
 	sby -f $(QSPI).sby x32swap
+## }}}
 
 
 .PHONY: clean
+## {{{
 clean:
 	rm -f $(LLQSPI).smt2 $(LLQSPI) *.vcd $(LLQSPI).yslog
 	rm -rf $(SPIX)_*/ $(DSPI)_*/ $(QSPI)_*/
+## }}}

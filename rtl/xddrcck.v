@@ -1,7 +1,7 @@
 ////////////////////////////////////////////////////////////////////////////////
 //
 // Filename: 	xddrck.v
-//
+// {{{
 // Project:	A Set of Wishbone Controlled SPI Flash Controllers
 //
 // Purpose:	When outputting a clock, Xilinx recommends using the ODDR
@@ -16,9 +16,9 @@
 //		Gisselquist Technology, LLC
 //
 ////////////////////////////////////////////////////////////////////////////////
-//
-// Copyright (C) 2015-2019, Gisselquist Technology, LLC
-//
+// }}}
+// Copyright (C) 2015-2021, Gisselquist Technology, LLC
+// {{{
 // This file is part of the set of Wishbone controlled SPI flash controllers
 // project
 //
@@ -36,27 +36,33 @@
 // along with this program.  (It's in the $(ROOT)/doc directory.  Run make
 // with no target there if the PDF file isn't present.)  If not, see
 // <http://www.gnu.org/licenses/> for a copy.
-//
+// }}}
 // License:	LGPL, v3, as defined and found on www.gnu.org,
+// {{{
 //		http://www.gnu.org/licenses/lgpl.html
-//
 //
 ////////////////////////////////////////////////////////////////////////////////
 //
-//
-module	xddrck(i_clk, i_v, o_pin);
-	input	[1:0]	i_clk;
-	input	[1:0]	i_v;
-	output		o_pin;
+// }}}
+module	xddrck(
+		// {{{
+		input	[1:0]	i_clk,
+		input	[1:0]	i_v,
+		output		o_pin
+		// }}}
+	);
 
 	wire	w_internal;
 	reg	last;
 
 	ODDR2 #(
+		// {{{
 		.DDR_ALIGNMENT("C0"),
 		.INIT(1'b1),
 		.SRTYPE("ASYNC")
+		// }}}
 	) ODDRi(
+		// {{{
 		.Q(o_pin),
 		.CE(1'b1),
 		.C0(i_clk[0]),
@@ -65,5 +71,6 @@ module	xddrck(i_clk, i_v, o_pin);
 		.D1(i_v[1]),	// Positive clock edge
 		.R(1'b0),
 		.S(1'b0));
+		// }}}
 
 endmodule

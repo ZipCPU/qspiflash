@@ -1,7 +1,7 @@
 ################################################################################
 ##
 ## Filename:	Makefile
-##
+## {{{
 ## Project:	A Set of Wishbone Controlled SPI Flash Controllers
 ##
 ## Purpose:	To direct the Verilator build of the SoC sources.  The result
@@ -13,9 +13,9 @@
 ##		Gisselquist Technology, LLC
 ##
 ################################################################################
-##
-## Copyright (C) 2018, Gisselquist Technology, LLC
-##
+## }}}
+## Copyright (C) 2018-2021, Gisselquist Technology, LLC
+## {{{
 ## This file is part of the set of Wishbone controlled SPI flash controllers
 ## project
 ##
@@ -33,14 +33,15 @@
 ## with this program.  (It's in the $(ROOT)/doc directory.  Run make with no
 ## target there if the PDF file isn't present.)  If not, see
 ## <http://www.gnu.org/licenses/> for a copy.
-##
+## }}}
 ## License:	LGPL, v3, as defined and found on www.gnu.org,
+## {{{
 ##		http://www.gnu.org/licenses/lgpl.html
 ##
 ##
 ################################################################################
 ##
-##
+## }}}
 all:	test
 YYMMDD=`date +%Y%m%d`
 VDIRFB := ./obj_dir
@@ -56,40 +57,67 @@ VFLAGS    := -Wall --MMD --trace -cc
 test: $(VDIRFB)/V$(SPI)__ALL.a $(VDIRFB)/V$(LEGACY)__ALL.a
 test: $(VDIRFB)/V$(DSPI)__ALL.a $(VDIRFB)/V$(QSPI)__ALL.a
 
+## legacy
+## {{{
+.PHONY: wbqspiflash
+wbqspiflash: $(VDIRFB)/V$(LEGACY)__ALL.a
 $(VDIRFB)/V$(LEGACY).mk:  $(VDIRFB)/V$(LEGACY).h
 $(VDIRFB)/V$(LEGACY).cpp: $(VDIRFB)/V$(LEGACY).h
 $(VDIRFB)/V$(LEGACY).h: $(LEGACY).v llqspi.v
 	$(VERILATOR) $(VFLAGS) $(LEGACY).v 
+## }}}
 
+## SPI
+## {{{
+.PHONY: spixpress
+spixpress: $(VDIRFB)/V$(SPI)__ALL.a
 $(VDIRFB)/V$(SPI).mk:  $(VDIRFB)/V$(SPI).h
 $(VDIRFB)/V$(SPI).cpp: $(VDIRFB)/V$(SPI).h
 $(VDIRFB)/V$(SPI).h: $(SPI).v
 	$(VERILATOR) $(VFLAGS) $(SPI).v 
+## }}}
 
+## Dual SPI
+## {{{
+.PHONY: dualflexpress
+dualflexpress: $(VDIRFB)/V$(DSPI)__ALL.a
 $(VDIRFB)/V$(DSPI).mk:  $(VDIRFB)/V$(DSPI).h
 $(VDIRFB)/V$(DSPI).cpp: $(VDIRFB)/V$(DSPI).h
 $(VDIRFB)/V$(DSPI).h: $(DSPI).v
 	$(VERILATOR) $(VFLAGS) $(DSPI).v 
+## }}}
 
+## Quad SPI
+## {{{
+.PHONY: qflexpress
+qflexpress: $(VDIRFB)/V$(QSPI)__ALL.a
 $(VDIRFB)/V$(QSPI).mk:  $(VDIRFB)/V$(QSPI).h
 $(VDIRFB)/V$(QSPI).cpp: $(VDIRFB)/V$(QSPI).h
 $(VDIRFB)/V$(QSPI).h: $(QSPI).v
 	$(VERILATOR) $(VFLAGS) $(QSPI).v 
+## }}}
 
+## Library builds
+## {{{
 $(VDIRFB)/V%__ALL.a: $(VDIRFB)/V%.mk
 	$(SUBMAKE) $(VDIRFB) -f V$*.mk
+## }}}
 
 tags: $(LEGACY).v llqspi.v $(SPI).v $(DSPI).v $(QSPI.v)
 	ctags $^
 
 .PHONY: clean
+## {{{
 clean:
 	rm -rf $(VDIRFB)/
+## }}}
 
-
+## Automatic dependency handling
+## {{{
 DEPS = $(wildcard $(VDIRFB)/*.d)
 ifneq ($(MAKECMDGOALS),clean)
 ifneq ($(DEPS),)
 include $(DEPS)
 endif
 endif
+## }}}

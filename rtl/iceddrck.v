@@ -1,7 +1,7 @@
 ////////////////////////////////////////////////////////////////////////////////
 //
 // Filename: 	iceddrck.v
-//
+// {{{
 // Project:	A Set of Wishbone Controlled SPI Flash Controllers
 //
 // Purpose:	
@@ -10,9 +10,9 @@
 //		Gisselquist Technology, LLC
 //
 ////////////////////////////////////////////////////////////////////////////////
-//
-// Copyright (C) 2018-2019, Gisselquist Technology, LLC
-//
+// }}}
+// Copyright (C) 2018-2021, Gisselquist Technology, LLC
+// {{{
 // This file is part of the set of Wishbone controlled SPI flash controllers
 // project
 //
@@ -30,8 +30,9 @@
 // along with this program.  (It's in the $(ROOT)/doc directory.  Run make
 // with no target there if the PDF file isn't present.)  If not, see
 // <http://www.gnu.org/licenses/> for a copy.
-//
+// }}}
 // License:	LGPL, v3, as defined and found on www.gnu.org,
+// {{{
 //		http://www.gnu.org/licenses/lgpl.html
 //
 //
@@ -39,14 +40,18 @@
 //
 //
 `default_nettype	none
-//
-module	iceddrck(i_clk, i_ddr, o_pin);
-	input	wire		i_clk;
-	input	wire	[1:0]	i_ddr;
-	output	wire		o_pin;
+// }}}
+module	iceddrck(
+		// {{{
+		input	wire		i_clk,
+		input	wire	[1:0]	i_ddr,
+		output	wire		o_pin
+		// }}}
+	);
 
-	SB_IO	#(.PIN_TYPE(6'b0100_01)
-	   ) oddr(
+	SB_IO	#(
+		.PIN_TYPE(6'b0100_01)
+	) oddr(
 		.OUTPUT_CLK(i_clk),
 		.CLOCK_ENABLE(1'b1),
 		.D_OUT_0(i_ddr[1]),

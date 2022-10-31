@@ -1,0 +1,28 @@
+CAPI=2:
+
+name : zipcpu::qspiflash:0
+
+filesets:
+  rtl:
+    files:
+      - rtl/llqspi.v
+      - rtl/wbqspiflash.v
+    file_type : verilogSource
+  sky130:
+    files: [data/sky130.tcl : {file_type : tclSource}]
+
+targets:
+  default:
+    filesets: [rtl]
+
+  lint:
+    default_tool : verilator
+    filesets : [rtl]
+    tools:
+      verilator: {mode: lint-only}
+    toplevel: wbqspiflash
+
+  sky130:
+    default_tool : openlane
+    filesets: [rtl, sky130]
+    toplevel : wbqspiflash
